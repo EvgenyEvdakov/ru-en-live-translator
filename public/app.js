@@ -1,88 +1,65 @@
-const $ = (selector) => document.querySelector(selector);
+const $ = (s) => document.querySelector(s);
 
 const startBtn = $("#startBtn");
 const stopBtn = $("#stopBtn");
-const status = $("#status");
+const statusEl = $("#status");
 const statusDot = $("#statusDot");
-const sourceTranscript = $("#sourceTranscript");
-const translatedTranscript = $("#translatedTranscript");
+const sourceTextEl = $("#sourceTranscript");
+const translatedTextEl = $("#translatedTranscript");
 const translatedAudio = $("#translatedAudio");
 const fileBox = $("#fileBox");
 const videoFile = $("#videoFile");
-const videoPreview = $("#videoPreview");
+const video = $("#videoPreview");
 const modeButtons = [...document.querySelectorAll(".mode")];
 
 let mode = "mic";
 let pc = null;
-let dataChannel = null;
+let events = null;
 let sourceStream = null;
 let displayStream = null;
-let fileCaptureStream = null;
-let objectUrl = null;
+let fileStream = null;
+let fileUrl = null;
+let starting = false;
 let sourceText = "";
 let translatedText = "";
-let starting = false;
 
-function setStatus(message, kind = "idle") {
-  status.textContent = message;
+function setStatus(text, kind = "idle") {
+  statusEl.textContent = text;
   statusDot.classList.toggle("live", kind === "live");
   statusDot.classList.toggle("error", kind === "error");
 }
 
-function friendlyError(error) {
+function message(error) {
   if (!error) return "Неизвестная ошибка.";
-
-  if (error.name === "NotAllowedError") {
-    return "Доступ к микрофону/звуку запрещён. Разрешите доступ в настройках браузера и попробуйте снова.";
-  }
-  if (error.name === "NotFoundError") {
-    return "Аудиоустройство не найдено. Проверьте микрофон или выбранный источник.";
-  }
-  if (error.name === "NotReadableError") {
-    return "Браузер не может открыть аудиоустройство. Возможно, его использует другая программа.";
-  }
-  if (error.name === "AbortError") {
-    return "Операция была прервана. Попробуйте ещё раз.";
-  }
-
+  if (error.name === "NotAllowedError") return "Нет доступа к микрофону или звуку. Разрешите доступ в браузере и попробуйте снова.";
+  if (error.name === "NotFoundError") return "Аудиоустройство не найдено.";
+  if (error.name === "NotReadableError") return "Не удалось открыть аудиоустройство. Возможно, его использует другая программа.";
+  if (error.name === "AbortError") return "Операция прервана или сервер не ответил вовремя.";
   return error.message || String(error);
 }
 
-function resetTranscriptPlaceholders() {
+function resetText() {
   sourceText = "";
   translatedText = "";
-  sourceTranscript.textContent = "Русская речь появится здесь…";
-  translatedTranscript.textContent = "English subtitles will appear here…";
+  sourceTextEl.textContent = "Русская речь появится здесь…";
+  translatedTextEl.textContent = "English subtitles will appear here…";
 }
 
-function assertBrowserEnvironment() {
+function assertEnvironment() {
   if (location.protocol === "file:") {
-    throw new Error(
-      "Приложение открыто как файл. Запустите `npm run dev` и откройте http://localhost:3000 — напрямую index.html перевод работать не может."
-    );
+    throw new Error("Нельзя открывать index.html двойным кликом. Запустите npm run dev и откройте http://localhost:3000");
   }
-
-  if (!window.isSecureContext) {
-    throw new Error(
-      "Браузер разрешает микрофон только в безопасном контексте. Используйте http://localhost:3000 или HTTPS."
-    );
+  if (!window.isSecureContext || !navigator.mediaDevices) {
+    throw new Error("Микрофон доступен только через http://localhost:3000 или HTTPS.");
   }
-
-  if (!navigator.mediaDevices) {
-    throw new Error(
-      "В этом браузере MediaDevices недоступен. Откройте приложение через http://localhost:3000 в Chrome или Edge."
-    );
-  }
-
   if (!window.RTCPeerConnection) {
-    throw new Error("ҭтот браузер не поддерживает WebRTC, необходимый для перевода.");
+    throw new Error("Этот браузер не поддерживает WebRTC. Используйте Chrome или Edge.");
   }
 }
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+async function fetchTimeout(url, options = {}, ms = 15000) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-
+  const timer = setTimeout(() => controller.abort(), ms);
   try {
     return await fetch(url, { ...options, signal: controller.signal });
   } finally {
@@ -93,186 +70,103 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
 async function checkServer() {
   let response;
   try {
-    response = await fetchWithTimeout("/api/health", { cache: "no-store" }, 5000);
-  } catch (error) {
-    if (error.name === "AbortError") {
-      throw new Error("Локальный сервер не ответил за 5 секунд. Перезапустите `npm run dev`.");
-    }
-    throw new Error(
-      "Не удалось связаться с локальным сервером. Запустите `npm install`, затем `npm run dev`, и откройте http://localhost:3000."
-    );
+    response = await fetchTimeout("/api/health", { cache: "no-store" }, 5000);
+  } catch (e) {
+    throw new Error("Локальный сервер недоступен. Выполните npm install, затем npm run dev и откройте http://localhost:3000");
   }
-
-  if (!response.ok) {
-    throw new Error(`Локальный сервер вернул HTTP ${response.status}. Перезапустите npm run dev.`);
+  if (!response.ok) throw new Error("Ошибка локального сервера: HTTP " + response.status);
+  const data = await response.json();
+  if (!data.configured) {
+    throw new Error("OPENAI_API_KEY не настроен. Создайте .env по образцу .env.example, вставьте ключ и перезапустите npm run dev.");
   }
-
-  const payload = await response.json();
-  if (!payload.configured) {
-    throw new Error(
-      "На сервере не настроен OPENAI_API_KEY. Скопируйте .env.example в .env, вставьте ключ и перезапустите `npm run dev`."
-    );
-  }
-
-  return payload;
 }
 
-function waitForEvent(target, eventName, timeoutMs = 5000) {
-  return new Promise((resolve, reject) => {
-    const onEvent = () => {
-      cleanup();
-      resolve();
-    };
-    const onError = () => {
-      cleanup();
-      reject(new Error("Браузер не смог прочитать выбранный видеофайл."));
-    };
-    const timer = setTimeout(() => {
-      cleanup();
-      reject(new Error(`Не дождался события ${eventName} от видеофайла.`));
-    }, timeoutMs);
+async function createSession() {
+  const response = await fetchTimeout("/api/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ targetLanguage: "en" })
+  }, 15000);
 
-    function cleanup() {
-      clearTimeout(timer);
-      target.removeEventListener(eventName, onEvent);
-      target.removeEventListener("error", onError);
-    }
-
-    target.addEventListener(eventName, onEvent, { once: true });
-    target.addEventListener("error", onError, { once: true });
-  });
+  let data = {};
+  try { data = await response.json(); } catch {}
+  if (!response.ok) throw new Error(data.error || ("Не удалось создать Realtime-сессию: HTTP " + response.status));
+  if (!data.value) throw new Error("Сервер не вернул временный Realtime client secret.");
+  return data.value;
 }
 
-function waitForAudioTrack(stream, timeoutMs = 2000) {
+function waitForAudioTrack(stream, ms = 3000) {
   const existing = stream.getAudioTracks()[0];
   if (existing) return Promise.resolve(existing);
 
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      stream.removeEventListener("addtrack", onTrack);
-      reject(new Error("Не удалось получить аудиодорожку видео. Проверьте, что в файле действительно есть звук."));
-    }, timeoutMs);
-
-    function onTrack(event) {
-      if (event.track?.kind !== "audio") return;
-      clearTimeout(timer);
-      stream.removeEventListener("addtrack", onTrack);
-      resolve(event.track);
-    }
-
-    stream.addEventListener("addtrack", onTrack);
+    const deadline = Date.now() + ms;
+    const timer = setInterval(() => {
+      const track = stream.getAudioTracks()[0];
+      if (track) {
+        clearInterval(timer);
+        resolve(track);
+      } else if (Date.now() >= deadline) {
+        clearInterval(timer);
+        reject(new Error("В видео не найдена аудиодорожка."));
+      }
+    }, 50);
   });
 }
 
-modeButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    if (pc || starting) return;
-    mode = button.dataset.mode;
-    modeButtons.forEach((item) => item.classList.toggle("active", item === button));
-    fileBox.classList.toggle("hidden", mode !== "file");
-
-    if (mode === "mic") setStatus("Режим: микрофон. Нажмите «Начать перевод».");
-    if (mode === "screen") setStatus("Режим: звук вкладки/экрана. Нажмите «Начать перевод».");
-    if (mode === "file") setStatus("Режим: видеофайл. Выберите файл и нажмите «Начать перевод».");
-  });
-});
-
-videoFile.addEventListener("change", () => {
-  if (objectUrl) URL.revokeObjectURL(objectUrl);
-  const file = videoFile.files?.[0];
-
-  if (!file) {
-    videoPreview.pause();
-    videoPreview.removeAttribute("src");
-    videoPreview.load();
-    videoPreview.classList.remove("has-file");
-    setStatus("Выберите видеофайл.");
-    return;
-  }
-
-  objectUrl = URL.createObjectURL(file);
-  videoPreview.src = objectUrl;
-  videoPreview.classList.add("has-file");
-  videoPreview.load();
-  setStatus(`Файл выбран: ${file.name}. Нажмите «Начать перевод».`);
-});
-
-async function getSourceAudio() {
+async function captureSource() {
   if (mode === "mic") {
-    setStatus("Браузер должен запросить доступ к микрофону…");
+    setStatus("Запрашиваю доступ к микрофону…");
     sourceStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
-      },
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       video: false
     });
-
-    const audioTrack = sourceStream.getAudioTracks()[0];
-    if (!audioTrack) throw new Error("Браузер не вернул аудиодорожку микрофона.");
-    setStatus(`Микрофон включён: ${audioTrack.label || "audio input"}. Подключаю перевод…`);
+    const track = sourceStream.getAudioTracks()[0];
+    if (!track) throw new Error("Браузер не вернул аудиодорожку микрофона.");
+    setStatus("Микрофон включён. Подключаю перевод…");
     return sourceStream;
   }
 
   if (mode === "screen") {
-    setStatus("Выберите вкладку/экран и обязательно включите передачу звука…");
-    displayStream = await navigator.mediaDevices.getDisplayMedia({
-      video: true,
-      audio: true
-    });
-
-    const audioTrack = displayStream.getAudioTracks()[0];
-    if (!audioTrack) {
-      displayStream.getTracks().forEach((track) => track.stop());
+    setStatus("Выберите вкладку и включите «Поделиться аудио» / Share tab audio…");
+    displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    const track = displayStream.getAudioTracks()[0];
+    if (!track) {
+      displayStream.getTracks().forEach((t) => t.stop());
       displayStream = null;
-      throw new Error(
-        "Звук не передаётся. При выборе вкладки включите «Поделиться аудио» / «Share tab audio»."
-      );
+      throw new Error("Звук вкладки не передаётся. При выборе вкладки включите Share tab audio.");
     }
-
-    const videoTrack = displayStream.getVideoTracks()[0];
-    if (videoTrack) {
-      videoTrack.addEventListener("ended", () => {
-        if (pc) stopTranslation();
-      }, { once: true });
-    }
-
-    sourceStream = new MediaStream([audioTrack]);
+    const screenTrack = displayStream.getVideoTracks()[0];
+    if (screenTrack) screenTrack.addEventListener("ended", () => stopTranslation(), { once: true });
+    sourceStream = new MediaStream([track]);
     setStatus("Звук вкладки получен. Подключаю перевод…");
     return sourceStream;
   }
 
   if (mode === "file") {
-    if (!videoFile.files?.[0]) {
-      throw new Error("Сначала выберите видеофайл.");
+    if (!videoFile.files || !videoFile.files[0]) throw new Error("Сначала выберите видеофайл.");
+    if (!video.captureStream && !video.mozCaptureStream) {
+      throw new Error("Ваш браузер не поддерживает захват звука видеофайла. Используйте Chrome/Edge или режим «Видео / вкладка».");
     }
 
-    if (videoPreview.readyState < HTMLMediaElement.HAVE_METADATA) {
-      setStatus("Читаю видеофайл…");
-      await waitForEvent(videoPreview, "loadedmetadata");
+    if (video.readyState < HTMLMediaElement.HAVE_METADATA) {
+      await new Promise((resolve, reject) => {
+        const ok = () => { cleanup(); resolve(); };
+        const bad = () => { cleanup(); reject(new Error("Не удалось прочитать видеофайл.")); };
+        const cleanup = () => {
+          video.removeEventListener("loadedmetadata", ok);
+          video.removeEventListener("error", bad);
+        };
+        video.addEventListener("loadedmetadata", ok, { once: true });
+        video.addEventListener("error", bad, { once: true });
+      });
     }
 
-    const capture = videoPreview.captureStream?.bind(videoPreview)
-      || videoPreview.mozCaptureStream?.bind(videoPreview);
-
-    if (!capture) {
-      throw new Error(
-        "Этот браузер не умеет захватывать звук локального видео. Используйте Chrome/Edge или режим «Видео / вкладка»."
-      );
-    }
-
-    // Capture before play so Chromium can expose the media tracks as playback starts.
-    fileCaptureStream = capture();
-
-    try {
-      await videoPreview.play();
-    } catch (error) {
-      throw new Error(`Не удалось запустить видео: ${friendlyError(error)}`);
-    }
-
-    const audioTrack = await waitForAudioTrack(fileCaptureStream);
-    sourceStream = new MediaStream([audioTrack]);
+    const capture = (video.captureStream || video.mozCaptureStream).bind(video);
+    fileStream = capture();
+    await video.play();
+    const track = await waitForAudioTrack(fileStream);
+    sourceStream = new MediaStream([track]);
     setStatus("Аудиодорожка видео получена. Подключаю перевод…");
     return sourceStream;
   }
@@ -280,226 +174,159 @@ async function getSourceAudio() {
   throw new Error("Неизвестный источник аудио.");
 }
 
-async function createClientSecret() {
-  let response;
-
-  try {
-    response = await fetchWithTimeout(
-      "/api/session",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetLanguage: "en" })
-      },
-      15000
-    );
-  } catch (error) {
-    if (error.name === "AbortError") {
-      throw new Error("OpenAI API не ответил за 15 секунд. Проверьте интернет и попробуйте снова.");
-    }
-    throw new Error(`Не удалось создать сессию перевода: ${friendlyError(error)}`);
-  }
-
-  let payload;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new Error(`Сервер вернул некорректный ответ (HTTP ${response.status}).`);
-  }
-
-  if (!response.ok) {
-    throw new Error(payload.error || `Не удалось создать сессию перевода (HTTP ${response.status}).`);
-  }
-
-  if (!payload.value) {
-    throw new Error("Сервер не вернул временный ключ Realtime API.");
-  }
-
-  return payload.value;
-}
-
-function onRealtimeEvent(event) {
-  if (event.type === "session.created") {
-    setStatus("Realtime-сессия создана. Жду русскую речь…", "live");
-  }
-
+function handleEvent(event) {
   if (event.type === "session.input_transcript.delta") {
     sourceText += event.delta || "";
-    sourceTranscript.textContent = sourceText || "Русская речь появится здесь…";
+    sourceTextEl.textContent = sourceText || "Русская речь появится здесь…";
   }
-
   if (event.type === "session.output_transcript.delta") {
     translatedText += event.delta || "";
-    translatedTranscript.textContent = translatedText || "English subtitles will appear here…";
+    translatedTextEl.textContent = translatedText || "English subtitles will appear here…";
   }
-
   if (event.type === "error") {
-    console.error("Realtime error", event);
+    console.error("Realtime API error", event);
     setStatus(event.error?.message || "Ошибка Realtime API", "error");
   }
 }
 
 async function connectRealtime(stream, clientSecret) {
   pc = new RTCPeerConnection();
-  const audioTrack = stream.getAudioTracks()[0];
+  const track = stream.getAudioTracks()[0];
+  if (!track) throw new Error("Нет аудиодорожки для отправки в переводчик.");
 
-  if (!audioTrack) {
-    throw new Error("Нет аудиодорожки для отправки в переводчик.");
-  }
+  pc.addTrack(track, stream);
 
-  pc.addTrack(audioTrack, stream);
-
-  pc.ontrack = ({ streams, track }) => {
-    const remoteStream = streams[0] || new MediaStream([track]);
-    translatedAudio.srcObject = remoteStream;
-    translatedAudio.play().catch((error) => {
-      console.warn("Translated audio autoplay was blocked", error);
-      setStatus(
-        "Перевод подключён, но браузер заблокировал автоматическое воспроизведение английского звука. Разрешите autoplay для localhost.",
-        "error"
-      );
+  pc.ontrack = ({ streams, track: remoteTrack }) => {
+    translatedAudio.srcObject = streams[0] || new MediaStream([remoteTrack]);
+    translatedAudio.play().catch(() => {
+      setStatus("Перевод подключён, но браузер заблокировал английский звук. Разрешите autoplay для localhost.", "error");
     });
   };
 
   pc.onconnectionstatechange = () => {
     if (!pc) return;
-
-    if (pc.connectionState === "connected") {
-      setStatus("Перевод идёт: русский → английский", "live");
-    } else if (pc.connectionState === "connecting") {
-      setStatus("Устанавливаю WebRTC-соединение…");
-    } else if (["failed", "disconnected"].includes(pc.connectionState)) {
-      setStatus("Соединение с переводчиком потеряно.", "error");
-    }
+    if (pc.connectionState === "connected") setStatus("Перевод идёт: русский → английский", "live");
+    if (pc.connectionState === "connecting") setStatus("Устанавливаю WebRTC-соединение…");
+    if (["failed", "disconnected"].includes(pc.connectionState)) setStatus("Соединение с переводчиком потеряно.", "error");
   };
 
-  pc.oniceconnectionstatechange = () => {
-    if (!pc) return;
-    console.info("ICE state:", pc.iceConnectionState);
+  events = pc.createDataChannel("oai-events");
+  events.onmessage = ({ data }) => {
+    try { handleEvent(JSON.parse(data)); }
+    catch (e) { console.warn("Bad realtime event", e, data); }
   };
-
-  dataChannel = pc.createDataChannel("oai-events");
-  dataChannel.onopen = () => console.info("Realtime event channel opened");
-  dataChannel.onerror = (event) => console.error("Realtime data channel error", event);
-  dataChannel.onmessage = ({ data }) => {
-    try {
-      onRealtimeEvent(JSON.parse(data));
-    } catch (error) {
-      console.warn("Bad realtime event", error, data);
-    }
-  };
+  events.onerror = (e) => console.error("Realtime data channel error", e);
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-
   setStatus("Подключаюсь к OpenAI Realtime…");
 
-  const sdpResponse = await fetchWithTimeout(
-    "https://api.openai.com/v1/realtime/translations/calls",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${clientSecret}`,
-        "Content-Type": "application/sdp"
-      },
-      body: offer.sdp
+  const response = await fetchTimeout("https://api.openai.com/v1/realtime/translations/calls", {
+    method: "POST",
+    headers: {
+      Authorization: "Bearer " + clientSecret,
+      "Content-Type": "application/sdp"
     },
-    20000
-  );
+    body: offer.sdp
+  }, 20000);
 
-  if (!sdpResponse.ok) {
-    const message = await sdpResponse.text();
-    throw new Error(`OpenAI WebRTC: HTTT ${sdpResponse.status}. ${message}`);
-  }
-
-  const answerSdp = await sdpResponse.text();
-  await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+  if (!response.ok) throw new Error("OpenAI WebRTC: HTTP " + response.status + ". " + await response.text());
+  await pc.setRemoteDescription({ type: "answer", sdp: await response.text() });
 }
 
 async function startTranslation() {
   if (starting || pc) return;
-
   starting = true;
   startBtn.disabled = true;
   stopBtn.disabled = false;
-  modeButtons.forEach((button) => (button.disabled = true));
-  resetTranscriptPlaceholders();
+  modeButtons.forEach((b) => b.disabled = true);
+  resetText();
 
   try {
-    assertBrowserEnvironment();
-
-    // Ask for/capture audio first, directly from the user's button click.
-    const stream = await getSourceAudio();
-
+    assertEnvironment();
+    const stream = await captureSource();
     setStatus("Проверяю локальный сервер и API-ключ…");
     await checkServer();
-
     setStatus("Создаю защищённую сессию перевода…");
-    const clientSecret = await createClientSecret();
-
-    await connectRealtime(stream, clientSecret);
-  } catch (error) {
-    console.error("Translation startup failed", error);
-    await stopTranslation({ keepStatus: true });
-    setStatus(friendlyError(error), "error");
+    const secret = await createSession();
+    await connectRealtime(stream, secret);
+  } catch (e) {
+    console.error("Translation startup failed", e);
+    await stopTranslation(true);
+    setStatus(message(e), "error");
   } finally {
     starting = false;
     if (!pc) {
       startBtn.disabled = false;
       stopBtn.disabled = true;
-      modeButtons.forEach((button) => (button.disabled = false));
+      modeButtons.forEach((b) => b.disabled = false);
     }
   }
 }
 
-async function stopTranslation({ keepStatus = false } = {}) {
-  if (dataChannel?.readyState === "open") {
-    try {
-      dataChannel.send(JSON.stringify({ type: "session.close" }));
-    } catch {
-      // Peer may already be closing.
-    }
+async function stopTranslation(keepStatus = false) {
+  if (events?.readyState === "open") {
+    try { events.send(JSON.stringify({ type: "session.close" })); } catch {}
   }
-
-  dataChannel?.close();
-  dataChannel = null;
-
+  events?.close();
+  events = null;
   pc?.close();
   pc = null;
 
-  sourceStream?.getTracks().forEach((track) => track.stop());
+  sourceStream?.getTracks().forEach((t) => t.stop());
   sourceStream = null;
-
-  displayStream?.getTracks().forEach((track) => track.stop());
+  displayStream?.getTracks().forEach((t) => t.stop());
   displayStream = null;
+  fileStream?.getTracks().forEach((t) => t.stop());
+  fileStream = null;
 
   translatedAudio.pause();
   translatedAudio.srcObject = null;
-
-  fileCaptureStream?.getTracks().forEach((track) => track.stop());
-  fileCaptureStream = null;
-
-  if (mode === "file") videoPreview.pause();
+  if (mode === "file") video.pause();
 
   startBtn.disabled = false;
   stopBtn.disabled = true;
-  modeButtons.forEach((button) => (button.disabled = false));
-
+  modeButtons.forEach((b) => b.disabled = false);
   if (!keepStatus) setStatus("Перевод остановлен.");
 }
+
+modeButtons.forEach((button) => button.addEventListener("click", () => {
+  if (starting || pc) return;
+  mode = button.dataset.mode;
+  modeButtons.forEach((b) => b.classList.toggle("active", b === button));
+  fileBox.classList.toggle("hidden", mode !== "file");
+  if (mode === "mic") setStatus("Режим: микрофон. Нажмите «Начать перевод».");
+  if (mode === "screen") setStatus("Режим: звук вкладки/экрана. Нажмите «Начать перевод».");
+  if (mode === "file") setStatus("Режим: видеофайл. Выберите файл и нажмите «Начать перевод».");
+}));
+
+videoFile.addEventListener("change", () => {
+  if (fileUrl) URL.revokeObjectURL(fileUrl);
+  const file = videoFile.files?.[0];
+  if (!file) {
+    video.removeAttribute("src");
+    video.load();
+    video.classList.remove("has-file");
+    return;
+  }
+  fileUrl = URL.createObjectURL(file);
+  video.src = fileUrl;
+  video.classList.add("has-file");
+  video.load();
+  setStatus("Файл выбран: " + file.name + ". Нажмите «Начать перевод».");
+});
 
 startBtn.addEventListener("click", startTranslation);
 stopBtn.addEventListener("click", () => stopTranslation());
 
 window.addEventListener("beforeunload", () => {
-  dataChannel?.close();
   pc?.close();
-  sourceStream?.getTracks().forEach((track) => track.stop());
-  displayStream?.getTracks().forEach((track) => track.stop());
+  sourceStream?.getTracks().forEach((t) => t.stop());
+  displayStream?.getTracks().forEach((t) => t.stop());
 });
 
 if (location.protocol === "file:") {
-  setStatus("Запустите приложение через `npm run dev`, а не открывайте index.html напрямую.", "error");
+  setStatus("Запустите приложение через npm run dev и откройте http://localhost:3000, а не index.html напрямую.", "error");
 } else if (!window.isSecureContext || !navigator.mediaDevices) {
   setStatus("Микрофон недоступен в текущем контексте. Используйте http://localhost:3000 или HTTPS.", "error");
 } else {
