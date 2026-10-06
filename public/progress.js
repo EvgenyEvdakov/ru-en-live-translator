@@ -14,6 +14,8 @@
     processed_seconds: 0,
     queue_seconds: 0,
     total_seconds: null,
+    overall_percent: null,
+    elapsed_seconds: 0,
   };
 
   const fmt = (seconds) => {
@@ -44,9 +46,13 @@
     bar.classList.remove("live");
 
     if (last.mode === "file" && total > 0) {
-      const ratio = Math.max(0, Math.min(1, processed / total));
+      const overall = Number(last.overall_percent);
+      const ratio = Number.isFinite(overall)
+        ? Math.max(0, Math.min(1, overall / 100))
+        : Math.max(0, Math.min(1, processed / total));
       bar.style.width = `${(ratio * 100).toFixed(1)}%`;
-      value.textContent = `${fmt(processed)} / ${fmt(total)}`;
+      const elapsed = Number(last.elapsed_seconds) || 0;
+      value.textContent = `${fmt(processed)} / ${fmt(total)} · прошло ${fmt(elapsed)}`;
       percent.textContent = `${Math.round(ratio * 100)}%`;
     } else if (received > 0) {
       const ratio = Math.max(0, Math.min(1, processed / received));
@@ -78,6 +84,8 @@
         processed_seconds: 0,
         queue_seconds: 0,
         total_seconds: null,
+        overall_percent: null,
+        elapsed_seconds: 0,
       };
     }
     render();
