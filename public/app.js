@@ -216,7 +216,7 @@ async function getSourceAudio() {
   }
 
   if (mode === "screen") {
-    setStatus("–í—ã–±–µ—Ä–∏—Ç–µ –≤–∫–ª–∞–¥–∫—É/—ç–∫—Ä–∞–Ω –∏ –æ–±—è–∑–∞—Ç–µ–ª—å–Ω–æ –≤–∫–ª—é—á–∏—Ç—Ç–µ –ø–µ—Ä–µ–¥–∞—á—É –∑–≤—É–∫–‚Ä¶");
+    setStatus("–í—ã–±–µ—Ä–∏—Ç–µ –≤–∫–ª–∞–¥–∫—É/—ç–∫—Ä–∞–Ω –∏ –æ–±—è–∑–∞—Ç–µ–ª—å–Ω–æ –≤–∫–ª—é—á–∏—Ç–µ –ø–µ—Ä–µ–¥–∞—á—É –∑–≤—É–∫–∞‚Ä¶");
     displayStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
       audio: true
@@ -248,8 +248,8 @@ async function getSourceAudio() {
       throw new Error("–°–Ω–∞—á–∞–ª–∞ –≤—ã–±–µ—Ä–∏—Ç–µ –≤–∏–¥–µ–æ—Ñ–∞–π–ª.");
     }
 
-    if (videoPreview.readyState < HTMLMediaElement.HAVE_METADATA_) {
-      setStatus("–ß–∏—Ç–∞—é –≤–∏–¥–µ–æ—Ñ–∞–π–∑‚Ä¶");
+    if (videoPreview.readyState < HTMLMediaElement.HAVE_METADATA) {
+      setStatus("–ß–∏—Ç–∞—é –≤–∏–¥–µ–æ—Ñ–∞–π–ª‚Ä¶");
       await waitForEvent(videoPreview, "loadedmetadata");
     }
 
@@ -258,7 +258,7 @@ async function getSourceAudio() {
 
     if (!capture) {
       throw new Error(
-        "–≠—Ç–æ—Ç –±—Ä–∞—É–∑–µ—Ä –Ω–µ —É–º–µ–µ—Ç –∑–∞—Ö–≤–∞—Ç—ã–≤–∞—Ç—å –∑–≤—É–∫ –ø–æ–∫–∞–ª—å–Ω–æ–≥–æ –≤–∏–¥–µ–æ. –ò—Å–ø–æ–ª—å–∑—É–π—Ç–µ Chrome/Edge –∏–ª–∏ —Ä–µ–∂–∏–º ¬´–í–∏–¥–µ–æ / –≤–∫–ª–∞–¥–∫–∞¬ª."
+        "–≠—Ç–æ—Ç –±—Ä–∞—É–∑–µ—Ä –Ω–µ —É–º–µ–µ—Ç –∑–∞—Ö–≤–∞—Ç—ã–≤–∞—Ç—å –∑–≤—É–∫ –ª–æ–∫–∞–ª—å–Ω–æ–≥–æ –≤–∏–¥–µ–æ. –ò—Å–ø–æ–ª—å–∑—É–π—Ç–µ Chrome/Edge –∏–ª–∏ —Ä–µ–∂–∏–º ¬´–í–∏–¥–µ–æ / –≤–∫–ª–∞–¥–∫–∞¬ª."
       );
     }
 
@@ -268,13 +268,240 @@ async function getSourceAudio() {
     try {
       await videoPreview.play();
     } catch (error) {
-      throw new Error(`–ù–µ —É–¥–∞–ª–æ—Å—å –∑–∞–ø—É—Å—Ç–∏—Ç—å —Ç–∏–¥–µ–æ: ${friendlyError(error)}`);
+      throw new Error(`–ù–µ —É–¥–∞–ª–æ—Å—å –∑–∞–ø—É—Å—Ç–∏—Ç—å –≤–∏–¥–µ–æ: ${friendlyError(error)}`);
     }
 
     const audioTrack = await waitForAudioTrack(fileCaptureStream);
     sourceStream = new MediaStream([audioTrack]);
-    setStatus("–ê—É–¥–∏–æ–¥–æ—Ä–æ–∂–∫–∞ –≤–∏–¥–µ–æ –ø–æ–ª—É—á–µ–Ω–∞. –ü–æ–¥–∫–ª—é—á–∞—é –ø–µ—Ä–µ–≤–æ–∑‚Ä¶");
+    setStatus("–ê—É–¥–∏–æ–¥–æ—Ä–æ–∂–∫–∞ –≤–∏–¥–µ–æ –ø–æ–ª—É—á–µ–Ω–∞. –ü–æ–¥–∫–ª—é—á–∞—é –ø–µ—Ä–µ–≤–æ–¥‚Ä¶");
     return sourceStream;
   }
 
-  throw new Error("–ù–µ–∏–∑–≤–µ—Å—Ç–Ω—ã–π –∏—Å—Ç–æ—á–Ω–∏–∫#B√FB”B„B¯∏à§Ï)Ù()ÖÕÂπåÅô’πç—•Ω∏Åç…ïÖ—ï±•ïπ—Mïç…ï–†§ÅÏ(ÄÅ±ï–Å…ïÕ¡ΩπÕîÏ((ÄÅ—…‰ÅÏ(ÄÄÄÅ…ïÕ¡ΩπÕîÄÙÅÖ›Ö•–Åôï—ç°]•—°Q•µïΩ’–†(ÄÄÄÄÄÄàΩÖ¡§ΩÕïÕÕ•Ω∏à∞(ÄÄÄÄÄÅÏ(ÄÄÄÄÄÄÄÅµï—°ΩêËÄâA=MPà∞(ÄÄÄÄÄÄÄÅ°ïÖëï…ÃËÅÏÄâΩπ—ïπ–µQÂ¡îàËÄâÖ¡¡±•çÖ—•Ω∏Ω©ÕΩ∏àÅÙ∞(ÄÄÄÄÄÄÄÅâΩë‰ËÅ)M=8πÕ—…•πù•ô‰°ÏÅ—Ö…ùï—1Öπù’ÖùîËÄâï∏àÅÙ§(ÄÄÄÄÄÅÙ∞(ÄÄÄÄÄÄƒ‘¿¿¿(ÄÄÄÄ§Ï(ÄÅÙÅçÖ—ç†Ä°ï……Ω»§ÅÏ(ÄÄÄÅ•òÄ°ï……Ω»ππÖµîÄÙÙÙÄââΩ…—……Ω»à§ÅÏ(ÄÄÄÄÄÅ—°…Ω‹Åπï‹Å……Ω»†â=¡ïπ$ÅA$ÉB˜B‘ÉB˚FBÀB◊FB„BÏÉBﬂB¿Äƒ‘ÉFB◊BÎFB˜B–∏ÉBFB˚BÀB◊FF3FB‘ÉB„B˜FB◊FB˜B◊FÉB‡ÉBˇB˚BˇFB˚B«FBÁFB‘ÉFB˜B˚BÀB¿∏à§Ï(ÄÄÄÅÙ(ÄÄÄÅ—°…Ω‹Åπï‹Å……Ω»†£BwB‘ÉFB”B√BÔB˚FF0ÉFB˚BﬂB”B√FF0ÉFB◊FFB„F8ÉBˇB◊FB◊BÀB˚B”B¿ËÄëÌ…•ïπë±Â……Ω»°ï……Ω»•Ù§§ÏÄ(ÄÅÙ((ÄÅ±ï–Å¡ÖÂ±ΩÖêÏ(ÄÅ—…‰ÅÏ(ÄÄÄÅ¡ÖÂ±ΩÖêÄÙÅÖ›Ö•–Å…ïÕ¡ΩπÕîπ©ÕΩ∏†§Ï(ÄÅÙÅçÖ—ç†ÅÏ(ÄÄÄÅ—°…Ω‹Åπï‹Å……Ω»†£BáB◊FBÀB◊F ÉBÀB◊FB˜FBÏÉB˜B◊BÎB˚FFB◊BÎFB˜F/B‰ÉB˚FBÀB◊FÄ°!QQ@ÄëÌ…ïÕ¡ΩπÕîπÕ—Ö—’ÕÙ§∏§§Ï(ÄÅÙ((ÄÅ•òÄ†Ö…ïÕ¡ΩπÕîπΩ¨§ÅÏ(ÄÄÄÅ—°…Ω‹Åπï‹Å……Ω»°¡ÖÂ±ΩÖêπï……Ω»ÅÒÄ£BwB‘ÉFB”B√BÔB˚FF0ÉFB˚BﬂB”B√FF0ÉFB◊FFB„F8ÉBˇB◊FB◊BÀB˚B”B¿Ä°!QQ@ÄëÌ…ïÕ¡ΩπÕîπÕ—Ö—’ÕÙ§∏§§Ï(ÄÅÙ((ÄÅ•òÄ†Ö¡ÖÂ±ΩÖêπŸÖ±’î§ÅÏ(ÄÄÄÅ—°…Ω‹Åπï‹Å……Ω»†ãBáB◊FBÀB◊F ÉB˜B‘ÉBÀB◊FB˜FBÏÉBÀFB◊BÛB◊B˜B˜F/B‰ÉBÎBÔF;FÅIïÖ±—•µîÅA$∏à§Ï(ÄÅÙ((ÄÅ…ï—’…∏Å¡ÖÂ±ΩÖêπŸÖ±’îÏ)Ù()ô’πç—•Ω∏ÅΩπIïÖ±—•µïŸïπ–°ïŸïπ–§ÅÏ(ÄÅ•òÄ°ïŸïπ–π—Â¡îÄÙÙÙÄâÕïÕÕ•Ω∏πç…ïÖ—ïêà§ÅÏ(ÄÄÄÅÕï—M—Ö—’Ã†âIïÖ±—•µî∑FB◊FFB„F<ÉB◊FB˚BﬂB”B√B˜B¿∏ÉBGB”FÉFFFFBÎFF8ÉFB◊FF3äòà∞Äâ±•Ÿîà§Ï(ÄÅÙ((ÄÅ•òÄ°ïŸïπ–π—Â¡îÄÙÙÙÄâÕïÕÕ•Ω∏π•π¡’—}—…ÖπÕç…•¡–πëï±—Ñà§ÅÏ(ÄÄÄÅÕΩ’…çïQï·–Ä¨ÙÅïŸïπ–πëï±—ÑÅÒÄààÏ(ÄÄÄÅÕΩ’…çïQ…ÖπÕç…•¡–π—ï·—Ωπ—ïπ–ÄÙÅÕΩ’…çïQï·–ÅÒÄãBÉFFFBÎB√F<ÉFB◊FF0ÉBˇB˚F?BÀB„FFF<ÉBﬂB”B◊FF3äòàÏ(ÄÅÙ((ÄÅ•òÄ°ïŸïπ–π—Â¡îÄÙÙÙÄâÕïÕÕ•Ω∏πΩ’—¡’—}—…ÖπÕç…•¡–πëï±—Ñà§ÅÏ(ÄÄÄÅ—…ÖπÕ±Ö—ïëQï·–Ä¨ÙÅïŸïπ–πëï±—ÑÅÒÄààÏ(ÄÄÄÅ—…ÖπÕ±Ö—ïëQ…ÖπÕç…•¡–π—ï·—Ωπ—ïπ–ÄÙÅ—…ÖπÕ±Ö—ïëQï·–ÅÒÄâπù±•Õ†ÅÕ’â—•—±ïÃÅ›•±∞ÅÖ¡¡ïÖ»Å°ï…óäòàÏ(ÄÅÙ((ÄÅ•òÄ°ïŸïπ–π—Â¡îÄÙÙÙÄâï……Ω»à§ÅÏ(ÄÄÄÅçΩπÕΩ±îπï……Ω»†âIïÖ±—•µîÅï……Ω»à∞ÅïŸïπ–§Ï(ÄÄÄÅÕï—M—Ö—’Ã°ïŸïπ–πï……Ω»¸πµïÕÕÖùîÅÒÄãB{F#B„B«BÎB¿ÅIïÖ±—•µîÅA$à∞Äâï……Ω»à§Ï(ÄÅÙ)Ù()ÖÕÂπåÅô’πç—•Ω∏ÅçΩππïç—IïÖ±—•µî°Õ—…ïÖ¥∞Åç±•ïπ—Mïç…ï–§ÅÏ(ÄÅ¡åÄÙÅπï‹ÅIQAïï…Ωππïç—•Ω∏†§Ï(ÄÅçΩπÕ–ÅÖ’ë•ΩQ…Öç¨ÄÙÅÕ—…ïÖ¥πùï—’ë•ΩQ…Öç≠Ã†•l¡tÏ((ÄÅ•òÄ†ÖÖ’ë•ΩQ…Öç¨§ÅÏ(ÄÄÄÅ—°…Ω‹Åπï‹Å……Ω»†ãBwB◊FÉB√FB”B„B˚B”B˚FB˚B€BÎB‡ÉB”BÔF<ÉB˚FBˇFB√BÀBÎB‡ÉB»ÉBˇB◊FB◊BÀB˚B”FB„BË∏à§Ï(ÄÅÙ((ÄÅ¡åπÖëëQ…Öç¨°Ö’ë•ΩQ…Öç¨∞ÅÕ—…ïÖ¥§Ï((ÄÅ¡åπΩπ—…Öç¨ÄÙÄ°ÏÅÕ—…ïÖµÃ∞Å—…Öç¨ÅÙ§ÄÙ¯ÅÏ(ÄÄÄÅçΩπÕ–Å…ïµΩ—ïM—…ïÖ¥ÄÙÅÕ—…ïÖµÕl¡tÅÒÅπï‹Å5ïë•ÖM—…ïÖ¥°m—…Öç≠t§Ï(ÄÄÄÅ—…ÖπÕ±Ö—ïë’ë•ºπÕ…ç=â©ïç–ÄÙÅ…ïµΩ—ïM—…ïÖ¥Ï(ÄÄÄÅ—…ÖπÕ±Ö—ïë’ë•ºπ¡±Ö‰†§πçÖ—ç††°ï……Ω»§ÄÙ¯ÅÏ(ÄÄÄÄÄÅçΩπÕΩ±îπ›Ö…∏†âQ…ÖπÕ±Ö—ïêÅÖ’ë•ºÅÖ’—Ω¡±Ö‰Å›ÖÃÅâ±Ωç≠ïêà∞Åï……Ω»§Ï(ÄÄÄÄÄÅÕï—M—Ö—’Ã†(ÄÄÄÄÄÄÄÄãBB◊FB◊BÀB˚B–ÉBˇB˚B”BÎBÔF;FFGBÙ∞ÉB˜B¯ÉB«FB√FBﬂB◊F ÉBﬂB√B«BÔB˚BÎB„FB˚BÀB√BÏÉB√BÀFB˚BÛB√FB„FB◊FBÎB˚B‘ÉBÀB˚FBˇFB˚B„BﬂBÀB◊B”B◊B˜B„B‘ÉB√B˜BœBÔB„BÁFBÎB˚BœB¯ÉBﬂBÀFBÎB¿∏ÉBÉB√BﬂFB◊F#B„FB‘ÅÖ’—Ω¡±Ö‰ÉB”BÔF<Å±ΩçÖ±°ΩÕ–∏à∞(ÄÄÄÄÄÄÄÄâï……Ω»à(ÄÄÄÄÄÄ§Ï(ÄÄÄÅÙ§Ï(ÄÅÙÏ((ÄÅ¡åπΩπçΩππïç—•ΩπÕ—Ö—ïç°ÖπùîÄÙÄ†§ÄÙ¯ÅÏ(ÄÄÄÅ•òÄ†Ö¡å§Å…ï—’…∏Ï((ÄÄÄÅ•òÄ°¡åπçΩππïç—•ΩπM—Ö—îÄÙÙÙÄâçΩππïç—ïêà§ÅÏ(ÄÄÄÄÄÅÕï—M—Ö—’Ã†ãBB◊FB◊BÀB˚B–ÉB„B”FGFËÉFFFFBÎB„B‰ÉäHÉB√B˜BœBÔB„BÁFBÎB„B‰à∞Äâ±•Ÿîà§Ï(ÄÄÄÅÙÅï±ÕîÅ•òÄ°¡åπçΩππïç—•ΩπM—Ö—îÄÙÙÙÄâçΩππïç—•πúà§ÅÏ(ÄÄÄÄÄÅÕï—M—Ö—’Ã†ãBèFFB√B˜B√BÀBÔB„BÀB√F8Å]ïâIQ∑FB˚B◊B”B„B˜B◊B˜B„B◊äòà§Ï(ÄÄÄÅÙÅï±ÕîÅ•òÄ°lâôÖ•±ïêà∞Äâë•ÕçΩππïç—ïêâtπ•πç±’ëïÃ°¡åπçΩππïç—•ΩπM—Ö—î§§Ä
+  throw new Error("–ù–µ–∏–∑–≤–µ—Å—Ç–Ω—ã–π –∏—Å—Ç–æ—á–Ω–∏–∫ –∞—É–¥–∏–æ.");
+}
+
+async function createClientSecret() {
+  let response;
+
+  try {
+    response = await fetchWithTimeout(
+      "/api/session",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetLanguage: "en" })
+      },
+      15000
+    );
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("OpenAI API –Ω–µ –æ—Ç–≤–µ—Ç–∏–ª –∑–∞ 15 —Å–µ–∫—É–Ω–¥. –ü—Ä–æ–≤–µ—Ä—å—Ç–µ –∏–Ω—Ç–µ—Ä–Ω–µ—Ç –∏ –ø–æ–ø—Ä–æ–±—É–π—Ç–µ —Å–Ω–æ–≤–∞.");
+    }
+    throw new Error(`–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ–∑–¥–∞—Ç—å —Å–µ—Å—Å–∏—é –ø–µ—Ä–µ–≤–æ–¥–∞: ${friendlyError(error)}`);
+  }
+
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error(`–°–µ—Ä–≤–µ—Ä –≤–µ—Ä–Ω—É–ª –Ω–µ–∫–æ—Ä—Ä–µ–∫—Ç–Ω—ã–π –æ—Ç–≤–µ—Ç (HTTP ${response.status}).`);
+  }
+
+  if (!response.ok) {
+    throw new Error(payload.error || `–ù–µ —É–¥–∞–ª–æ—Å—å —Å–æ–∑–¥–∞—Ç—å —Å–µ—Å—Å–∏—é –ø–µ—Ä–µ–≤–æ–¥–∞ (HTTP ${response.status}).`);
+  }
+
+  if (!payload.value) {
+    throw new Error("–°–µ—Ä–≤–µ—Ä –Ω–µ –≤–µ—Ä–Ω—É–ª –≤—Ä–µ–º–µ–Ω–Ω—ã–π –∫–ª—é—á Realtime API.");
+  }
+
+  return payload.value;
+}
+
+function onRealtimeEvent(event) {
+  if (event.type === "session.created") {
+    setStatus("Realtime-—Å–µ—Å—Å–∏—è —Å–æ–∑–¥–∞–Ω–∞. –ñ–¥—É —Ä—É—Å—Å–∫—É—é —Ä–µ—á—å‚Ä¶", "live");
+  }
+
+  if (event.type === "session.input_transcript.delta") {
+    sourceText += event.delta || "";
+    sourceTranscript.textContent = sourceText || "–†—É—Å—Å–∫–∞—è —Ä–µ—á—å –ø–æ—è–≤–∏—Ç—Å—è –∑–¥–µ—Å—å‚Ä¶";
+  }
+
+  if (event.type === "session.output_transcript.delta") {
+    translatedText += event.delta || "";
+    translatedTranscript.textContent = translatedText || "English subtitles will appear here‚Ä¶";
+  }
+
+  if (event.type === "error") {
+    console.error("Realtime error", event);
+    setStatus(event.error?.message || "–û—à–∏–±–∫–∞ Realtime API", "error");
+  }
+}
+
+async function connectRealtime(stream, clientSecret) {
+  pc = new RTCPeerConnection();
+  const audioTrack = stream.getAudioTracks()[0];
+
+  if (!audioTrack) {
+    throw new Error("–ù–µ—Ç –∞—É–¥–∏–æ–¥–æ—Ä–æ–∂–∫–∏ –¥–ª—è –æ—Ç–ø—Ä–∞–≤–∫–∏ –≤ –ø–µ—Ä–µ–≤–æ–¥—á–∏–∫.");
+  }
+
+  pc.addTrack(audioTrack, stream);
+
+  pc.ontrack = ({ streams, track }) => {
+    const remoteStream = streams[0] || new MediaStream([track]);
+    translatedAudio.srcObject = remoteStream;
+    translatedAudio.play().catch((error) => {
+      console.warn("Translated audio autoplay was blocked", error);
+      setStatus(
+        "–ü–µ—Ä–µ–≤–æ–¥ –ø–æ–¥–∫–ª—é—á—ë–Ω, –Ω–æ –±—Ä–∞—É–∑–µ—Ä –∑–∞–±–ª–æ–∫–∏—Ä–æ–≤–∞–ª –∞–≤—Ç–æ–º–∞—Ç–∏—á–µ—Å–∫–æ–µ –≤–æ—Å–ø—Ä–æ–∏–∑–≤–µ–¥–µ–Ω–∏–µ –∞–Ω–≥–ª–∏–π—Å–∫–æ–≥–æ –∑–≤—É–∫–∞. –†–∞–∑—Ä–µ—à–∏—Ç–µ autoplay –¥–ª—è localhost.",
+        "error"
+      );
+    });
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (!pc) return;
+
+    if (pc.connectionState === "connected") {
+      setStatus("–ü–µ—Ä–µ–≤–æ–¥ –∏–¥—ë—Ç: —Ä—É—Å—Å–∫–∏–π ‚Üí –∞–Ω–≥–ª–∏–π—Å–∫–∏–π", "live");
+    } else if (pc.connectionState === "connecting") {
+      setStatus("–£—Å—Ç–∞–Ω–∞–≤–ª–∏–≤–∞—é WebRTC-—Å–æ–µ–¥–∏–Ω–µ–Ω–∏–µ‚Ä¶");
+    } else if (["failed", "disconnected"].includes(pc.connectionState)) {
+      setStatus("–°–æ–µ–¥–∏–Ω–µ–Ω–∏–µ —Å –ø–µ—Ä–µ–≤–æ–¥—á–∏–∫–æ–º –ø–æ—Ç–µ—Ä—è–Ω–æ.", "error");
+    }
+  };
+
+  pc.oniceconnectionstatechange = () => {
+    if (!pc) return;
+    console.info("ICE state:", pc.iceConnectionState);
+  };
+
+  dataChannel = pc.createDataChannel("oai-events");
+  dataChannel.onopen = () => console.info("Realtime event channel opened");
+  dataChannel.onerror = (event) => console.error("Realtime data channel error", event);
+  dataChannel.onmessage = ({ data }) => {
+    try {
+      onRealtimeEvent(JSON.parse(data));
+    } catch (error) {
+      console.warn("Bad realtime event", error, data);
+    }
+  };
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  setStatus("–ü–æ–¥–∫–ª—é—á–∞—é—Å—å –∫ OpenAI Realtime‚Ä¶");
+
+  const sdpResponse = await fetchWithTimeout(
+    "https://api.openai.com/v1/realtime/translations/calls",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${clientSecret}`,
+        "Content-Type": "application/sdp"
+      },
+      body: offer.sdp
+    },
+    20000
+  );
+
+  if (!sdpResponse.ok) {
+    const message = await sdpResponse.text();
+    throw new Error(`OpenAI WebRTC: HTTT ${sdpResponse.status}. ${message}`);
+  }
+
+  const answerSdp = await sdpResponse.text();
+  await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+}
+
+async function startTranslation() {
+  if (starting || pc) return;
+
+  starting = true;
+  startBtn.disabled = true;
+  stopBtn.disabled = false;
+  modeButtons.forEach((button) => (button.disabled = true));
+  resetTranscriptPlaceholders();
+
+  try {
+    assertBrowserEnvironment();
+
+    // Ask for/capture audio first, directly from the user's button click.
+    const stream = await getSourceAudio();
+
+    setStatus("–ü—Ä–æ–≤–µ—Ä—è—é –ª–æ–∫–∞–ª—å–Ω—ã–π —Å–µ—Ä–≤–µ—Ä –∏ API-–∫–ª—é—á‚Ä¶");
+    await checkServer();
+
+    setStatus("–°–æ–∑–¥–∞—é –∑–∞—â–∏—â—ë–Ω–Ω—É—é —Å–µ—Å—Å–∏—é –ø–µ—Ä–µ–≤–æ–¥–∞‚Ä¶");
+    const clientSecret = await createClientSecret();
+
+    await connectRealtime(stream, clientSecret);
+  } catch (error) {
+    console.error("Translation startup failed", error);
+    await stopTranslation({ keepStatus: true });
+    setStatus(friendlyError(error), "error");
+  } finally {
+    starting = false;
+    if (!pc) {
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      modeButtons.forEach((button) => (button.disabled = false));
+    }
+  }
+}
+
+async function stopTranslation({ keepStatus = false } = {}) {
+  if (dataChannel?.readyState === "open") {
+    try {
+      dataChannel.send(JSON.stringify({ type: "session.close" }));
+    } catch {
+      // Peer may already be closing.
+    }
+  }
+
+  dataChannel?.close();
+  dataChannel = null;
+
+  pc?.close();
+  pc = null;
+
+  sourceStream?.getTracks().forEach((track) => track.stop());
+  sourceStream = null;
+
+  displayStream?.getTracks().forEach((track) => track.stop());
+  displayStream = null;
+
+  translatedAudio.pause();
+  translatedAudio.srcObject = null;
+
+  fileCaptureStream?.getTracks().forEach((track) => track.stop());
+  fileCaptureStream = null;
+
+  if (mode === "file") videoPreview.pause();
+
+  startBtn.disabled = false;
+  stopBtn.disabled = true;
+  modeButtons.forEach((button) => (button.disabled = false));
+
+  if (!keepStatus) setStatus("–ü–µ—Ä–µ–≤–æ–¥ –æ—Å—Ç–∞–Ω–æ–≤–ª–µ–Ω.");
+}
+
+startBtn.addEventListener("click", startTranslation);
+stopBtn.addEventListener("click", () => stopTranslation());
+
+window.addEventListener("beforeunload", () => {
+  dataChannel?.close();
+  pc?.close();
+  sourceStream?.getTracks().forEach((track) => track.stop());
+  displayStream?.getTracks().forEach((track) => track.stop());
+});
+
+if (location.protocol === "file:") {
+  setStatus("–ó–∞–ø—É—Å—Ç–∏—Ç–µ –ø—Ä–∏–ª–æ–∂–µ–Ω–∏–µ —á–µ—Ä–µ–∑ `npm run dev`, –∞ –Ω–µ –æ—Ç–∫—Ä—ã–≤–∞–π—Ç–µ index.html –Ω–∞–ø—Ä—è–º—É—é.", "error");
+} else if (!window.isSecureContext || !navigator.mediaDevices) {
+  setStatus("–ú–∏–∫—Ä–æ—Ñ–æ–Ω –Ω–µ–¥–æ—Å—Ç—É–ø–µ–Ω –≤ —Ç–µ–∫—É—â–µ–º –∫–æ–Ω—Ç–µ–∫—Å—Ç–µ. –ò—Å–ø–æ–ª—å–∑—É–π—Ç–µ http://localhost:3000 –∏–ª–∏ HTTPS.", "error");
+} else {
+  setStatus("–ò–Ω—Ç–µ—Ä—Ñ–µ–π—Å –∑–∞–≥—Ä—É–∂–µ–Ω. –í—ã–±–µ—Ä–∏—Ç–µ –∏—Å—Ç–æ—á–Ω–∏–∫ –∏ –Ω–∞–∂–º–∏—Ç–µ ¬´–ù–∞—á–∞—Ç—å –ø–µ—Ä–µ–≤–æ–¥¬ª.");
+}
