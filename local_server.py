@@ -132,6 +132,17 @@ class LocalModels:
         with self._lock:
             if self.tts is not None:
                 return
+
+            import perth
+            watermarker = getattr(perth, "PerthImplicitWatermarker", None)
+            if not callable(watermarker):
+                raise RuntimeError(
+                    "Chatterbox watermarking is unavailable because the installed "
+                    "setuptools version is incompatible with Perth. Run: "
+                    ".\\.venv\\Scripts\\python.exe -m pip install \"setuptools<81\" "
+                    "and restart the server."
+                )
+
             from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 
             loader = ChatterboxMultilingualTTS.from_pretrained
