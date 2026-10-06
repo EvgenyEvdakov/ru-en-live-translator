@@ -233,6 +233,8 @@ function handleServerMessage(event) {
     startCapture().catch((error) => fail(error));
   } else if (message.type === "voice_ready") {
     setStatus(message.message, "live");
+  } else if (message.type === "progress") {
+    window.dispatchEvent(new CustomEvent("translator-progress", { detail: message }));
   } else if (message.type === "source") {
     appendText(sourceTranscript, sourceLines, message.text, "Русская речь появится здесь…");
   } else if (message.type === "translation") {
@@ -269,7 +271,10 @@ async function startTranslation() {
         finishStop();
       }
     });
-    socket.send(JSON.stringify({ type: "start", mode }));
+    const duration = mode === "file" && Number.isFinite(videoPreview.duration)
+      ? videoPreview.duration
+      : null;
+    socket.send(JSON.stringify({ type: "start", mode, duration }));
   } catch (error) {
     fail(error);
   }
