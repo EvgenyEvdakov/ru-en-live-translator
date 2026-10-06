@@ -82,3 +82,9 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-width: 760px) {
   .processing-progress-info { align-items: flex-start; flex-direction: column; gap: 4px; }
 }
+
+.file-processing-note { margin: 14px 0 0; color: #8f9db3; line-height: 1.55; font-size: 13px; }
+.result-box { margin-top: 18px; padding-top: 18px; border-top: 1px solid #2b3547; }
+.result-box h3 { margin: 0 0 12px; font-size: 16px; }
+#resultVideo { display: block; width: 100%; max-height: 520px; border-radius: 14px; background: #000; }
+.download-result { display: inline-flex; margin-top: 12px; padding: 11px 15px; border-radius: 12px; background: #22c55e; color: #07110b; text-decoration: none; font-weight: 850; }
