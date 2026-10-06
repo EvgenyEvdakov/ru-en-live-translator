@@ -1,17 +1,20 @@
 (() => {
   const startBtn = document.querySelector("#startBtn");
-  const stopBtn = document.querySelector("#stopBtn");
-  const video = document.querySelector("#videoPreview");
-  const status = document.querySelector("#status");
   const bar = document.querySelector("#processingProgressBar");
   const value = document.querySelector("#processingProgressValue");
   const text = document.querySelector("#processingProgressText");
   const percent = document.querySelector("#processingProgressPercent");
 
-  if (!startBtn || !stopBtn || !video || !bar || !value || !text || !percent) return;
+  if (!startBtn || !bar || !value || !text || !percent) return;
 
-  let startedAt = 0;
-  let timer = null;
+  let last = {
+    mode: "mic",
+    stage: "Ожидание запуска",
+    received_seconds: 0,
+    processed_seconds: 0,
+    queue_seconds: 0,
+    total_seconds: null,
+  };
 
   const fmt = (seconds) => {
     const total = Math.max(0, Math.floor(Number(seconds) || 0));
@@ -23,73 +26,62 @@
       : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
 
-  const currentMode = () => document.querySelector(".mode.active")?.dataset.mode || "mic";
-
-  const reset = () => {
-    if (timer) clearInterval(timer);
-    timer = null;
-    startedAt = 0;
-    bar.classList.remove("live");
-    bar.style.width = "0%";
-    value.textContent = "00:00";
-    text.textContent = "Ожидание запуска";
-    percent.textContent = "0%";
-  };
-
-  const update = () => {
+  const render = () => {
     if (!startBtn.disabled) {
-      reset();
-      return;
-    }
-
-    const mode = currentMode();
-    if (mode === "file" && Number.isFinite(video.duration) && video.duration > 0) {
-      const current = Math.min(video.duration, Math.max(0, video.currentTime || 0));
-      const ratio = current / video.duration;
       bar.classList.remove("live");
-      bar.style.width = `${(ratio * 100).toFixed(1)}%`;
-      value.textContent = `${fmt(current)} / ${fmt(video.duration)}`;
-      text.textContent = "Обработка видео и его аудиодорожки";
-      percent.textContent = `${Math.round(ratio * 100)}%`;
+      bar.style.width = "0%";
+      value.textContent = "00:00";
+      text.textContent = "Ожидание запуска";
+      percent.textContent = "0%";
       return;
     }
 
-    if (!startedAt) startedAt = performance.now();
-    const elapsed = (performance.now() - startedAt) / 1000;
-    bar.style.width = "";
-    bar.classList.add("live");
-    value.textContent = fmt(elapsed);
-    text.textContent = mode === "screen"
-      ? "Обработка звука вкладки / экрана"
-      : "Обработка звука микрофона";
-    percent.textContent = "LIVE";
+    const received = Number(last.received_seconds) || 0;
+    const processed = Number(last.processed_seconds) || 0;
+    const queue = Math.max(0, Number(last.queue_seconds) || 0);
+    const total = Number(last.total_seconds) || 0;
+
+    bar.classList.remove("live");
+
+    if (last.mode === "file" && total > 0) {
+      const ratio = Math.max(0, Math.min(1, processed / total));
+      bar.style.width = `${(ratio * 100).toFixed(1)}%`;
+      value.textContent = `${fmt(processed)} / ${fmt(total)}`;
+      percent.textContent = `${Math.round(ratio * 100)}%`;
+    } else if (received > 0) {
+      const ratio = Math.max(0, Math.min(1, processed / received));
+      bar.style.width = `${Math.max(2, ratio * 100).toFixed(1)}%`;
+      value.textContent = `${fmt(processed)} / ${fmt(received)}`;
+      percent.textContent = "LIVE";
+    } else {
+      bar.style.width = "";
+      bar.classList.add("live");
+      value.textContent = "00:00";
+      percent.textContent = last.mode === "file" ? "0%" : "LIVE";
+    }
+
+    const queueText = queue > 0.05 ? ` · очередь ${queue.toFixed(1)} с` : "";
+    text.textContent = `${last.stage || "Обработка"} · получено ${fmt(received)} · обработано ${fmt(processed)}${queueText}`;
   };
 
-  const startTimer = () => {
-    if (!startedAt) startedAt = performance.now();
-    if (!timer) timer = setInterval(update, 200);
-    update();
-  };
-
-  startBtn.addEventListener("click", () => setTimeout(() => {
-    if (startBtn.disabled) startTimer();
-  }, 0));
-
-  stopBtn.addEventListener("click", () => setTimeout(update, 0));
-  video.addEventListener("timeupdate", update);
-  video.addEventListener("loadedmetadata", update);
-  video.addEventListener("ended", update);
+  window.addEventListener("translator-progress", (event) => {
+    last = { ...last, ...(event.detail || {}) };
+    render();
+  });
 
   new MutationObserver(() => {
-    if (startBtn.disabled) startTimer();
-    else reset();
+    if (!startBtn.disabled) {
+      last = {
+        mode: "mic",
+        stage: "Ожидание запуска",
+        received_seconds: 0,
+        processed_seconds: 0,
+        queue_seconds: 0,
+        total_seconds: null,
+      };
+    }
+    render();
   }).observe(startBtn, { attributes: true, attributeFilter: ["disabled"] });
 
-  new MutationObserver(() => {
-    if (startBtn.disabled) {
-      text.title = status.textContent || "";
-    }
-  }).observe(status, { childList: true, characterData: true, subtree: true });
-
-  reset();
+  render();
 })();
