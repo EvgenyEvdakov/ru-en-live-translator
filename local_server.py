@@ -24,16 +24,19 @@ os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "120")
 os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "30")
 
 def normalize_proxy_environment() -> None:
-    """httpx/huggingface_hub support SOCKS5, but reject socks4:// URLs."""
+    """Ignore unsupported SOCKS4 proxy variables for Hugging Face/httpx.
+
+    This avoids requiring extra SOCKS packages just to download local models.
+    HTTP/HTTPS/SOCKS5 proxy values are left untouched.
+    """
     for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
         value = os.environ.get(key)
         if not value:
             continue
         lowered = value.lower()
         if lowered.startswith("socks4://") or lowered.startswith("socks4a://"):
-            normalized = "socks5://" + value.split("://", 1)[1]
-            os.environ[key] = normalized
-            print(f"[proxy] {key}: normalized SOCKS4 -> SOCKS5 ({normalized})")
+            os.environ.pop(key, None)
+            print(f"[proxy] {key}: ignored unsupported SOCKS4 proxy ({value}); using direct connection")
 
 normalize_proxy_environment()
 
@@ -499,8 +502,8 @@ async def translate_socket(websocket: WebSocket) -> None:
                         ):
                             message = (
                                 "Ошибка сетевого доступа к Hugging Face. Приложение автоматически отключает Xet/CAS "
-                                "и преобразует socks4:// proxy в socks5://. Обновите зависимости, перезапустите сервер "
-                                "и нажмите «Начать перевод» ещё раз."
+                                "и игнорирует неподдерживаемый socks4:// proxy для загрузки моделей. "
+                                "Перезапустите сервер и нажмите «Начать перевод» ещё раз."
                             )
                         await session.send_json({"type": "error", "message": message})
                 elif payload.get("type") == "stop":
