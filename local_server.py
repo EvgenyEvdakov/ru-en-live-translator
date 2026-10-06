@@ -5,10 +5,13 @@ import inspect
 import json
 import math
 import os
+import subprocess
 import struct
 import tempfile
 import threading
 import time
+import uuid
+import warnings
 import wave
 from collections import deque
 from pathlib import Path
@@ -42,15 +45,25 @@ def normalize_proxy_environment() -> None:
 
 normalize_proxy_environment()
 
+import imageio_ffmpeg
 import numpy as np
 import torch
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from faster_whisper import WhisperModel
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
+warnings.filterwarnings("ignore", message="Recommended: pip install sacremoses.")
+
 BASE_DIR = Path(__file__).resolve().parent
 PUBLIC_DIR = BASE_DIR / "public"
+OUTPUT_DIR = BASE_DIR / "outputs"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+VIDEO_JOBS: dict[str, dict] = {}
+VIDEO_JOBS_LOCK = threading.Lock()
+VIDEO_PROCESS_LOCK = threading.Lock()
+VIDEO_TASKS: set[asyncio.Task] = set()
 SAMPLE_RATE = 16_000
 PCM_DTYPE = np.dtype("<i2")
 FRAME_MS = 20
@@ -176,6 +189,31 @@ class LocalModels:
             )
             text = " ".join(segment.text.strip() for segment in segments).strip()
         return text
+
+    def transcribe_ru_segments(self, audio: np.ndarray, progress_callback=None) -> list[dict]:
+        assert self.asr is not None
+        results: list[dict] = []
+        with self._lock:
+            segments, _ = self.asr.transcribe(
+                audio.astype(np.float32),
+                language="ru",
+                task="transcribe",
+                beam_size=1,
+                vad_filter=True,
+                condition_on_previous_text=False,
+                temperature=0.0,
+            )
+            for segment in segments:
+                text = segment.text.strip()
+                if text:
+                    results.append({
+                        "start": float(segment.start),
+                        "end": float(segment.end),
+                        "text": text,
+                    })
+                if progress_callback:
+                    progress_callback(float(segment.end))
+        return results
 
     def translate_ru_en(self, text: str) -> str:
         assert self.mt_model is not None and self.mt_tokenizer is not None
@@ -497,6 +535,205 @@ class TranslationSession:
             self.tmpdir.cleanup()
 
 
+def _video_job_update(job_id: str, **changes) -> None:
+    with VIDEO_JOBS_LOCK:
+        job = VIDEO_JOBS.get(job_id)
+        if not job:
+            return
+        job.update(changes)
+        if job.get("started_at"):
+            job["elapsed_seconds"] = round(time.monotonic() - job["started_at"], 1)
+
+
+def _video_job_public(job_id: str) -> dict:
+    with VIDEO_JOBS_LOCK:
+        job = VIDEO_JOBS.get(job_id)
+        if not job:
+            raise KeyError(job_id)
+        return {
+            "id": job_id,
+            "state": job.get("state", "queued"),
+            "stage": job.get("stage", "Ожидание"),
+            "progress": round(float(job.get("progress", 0.0)), 1),
+            "processed_seconds": round(float(job.get("processed_seconds", 0.0)), 2),
+            "total_seconds": job.get("total_seconds"),
+            "elapsed_seconds": round(float(job.get("elapsed_seconds", 0.0)), 1),
+            "source_text": job.get("source_text", ""),
+            "translation_text": job.get("translation_text", ""),
+            "error": job.get("error"),
+            "download_url": job.get("download_url"),
+        }
+
+
+def _video_cancel_requested(job_id: str) -> bool:
+    with VIDEO_JOBS_LOCK:
+        return bool(VIDEO_JOBS.get(job_id, {}).get("cancel_requested"))
+
+
+def _run_ffmpeg(args: list[str]) -> None:
+    process = subprocess.run(
+        args,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+    )
+    if process.returncode != 0:
+        message = process.stderr.decode("utf-8", errors="replace")
+        raise RuntimeError(f"FFmpeg error: {message[-3000:]}")
+
+
+def _read_pcm16_wav(path: Path) -> tuple[np.ndarray, int]:
+    with wave.open(str(path), "rb") as wav:
+        channels = wav.getnchannels()
+        sample_rate = wav.getframerate()
+        frames = wav.readframes(wav.getnframes())
+    pcm = np.frombuffer(frames, dtype=PCM_DTYPE)
+    if channels > 1:
+        pcm = pcm.reshape(-1, channels).mean(axis=1).astype(PCM_DTYPE)
+    return pcm.astype(np.float32) / 32768.0, sample_rate
+
+
+def _write_silence(wav_out, samples: int) -> None:
+    zero_chunk = b"\x00\x00" * 8192
+    remaining = max(0, int(samples))
+    while remaining:
+        count = min(remaining, 8192)
+        wav_out.writeframesraw(zero_chunk[: count * 2])
+        remaining -= count
+
+
+def _build_voice_reference(audio: np.ndarray, segments: list[dict], path: Path) -> None:
+    target = max(1, int(VOICE_REFERENCE_SECONDS * SAMPLE_RATE))
+    parts: list[np.ndarray] = []
+    collected = 0
+    for segment in segments:
+        start = max(0, int(segment["start"] * SAMPLE_RATE))
+        end = min(audio.size, int(segment["end"] * SAMPLE_RATE))
+        if end <= start:
+            continue
+        piece = audio[start:end]
+        need = target - collected
+        if need <= 0:
+            break
+        piece = piece[:need]
+        if piece.size:
+            parts.append(piece)
+            collected += piece.size
+    if not parts:
+        raise RuntimeError("В видео не удалось найти русскую речь для клонирования голоса.")
+    reference = np.concatenate(parts)
+    if reference.size < SAMPLE_RATE:
+        raise RuntimeError("Слишком мало чистой речи для клонирования голоса. Нужно хотя бы около 1 секунды.")
+    pcm16 = np.clip(reference * 32767.0, -32768, 32767).astype(PCM_DTYPE)
+    write_pcm16_wav(path, pcm16)
+
+
+def _process_video_job(job_id: str, input_path: Path, output_path: Path) -> None:
+    with VIDEO_PROCESS_LOCK:
+        try:
+            _video_job_update(job_id, state="running", stage="Загрузка локальных моделей", progress=2)
+            MODELS.load_asr()
+            MODELS.load_translation()
+            MODELS.load_tts()
+            if _video_cancel_requested(job_id):
+                _video_job_update(job_id, state="cancelled", stage="Отменено")
+                return
+
+            work_dir = input_path.parent
+            source_wav = work_dir / "source_16k.wav"
+            reference_wav = work_dir / "voice_reference.wav"
+            translated_wav = work_dir / "translated_voice.wav"
+            ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+
+            _video_job_update(job_id, stage="Извлечение аудио из видео", progress=6)
+            _run_ffmpeg([ffmpeg, "-y", "-i", str(input_path), "-vn", "-ac", "1", "-ar", str(SAMPLE_RATE), "-c:a", "pcm_s16le", str(source_wav)])
+
+            audio, sample_rate = _read_pcm16_wav(source_wav)
+            if sample_rate != SAMPLE_RATE or audio.size == 0:
+                raise RuntimeError("Не удалось извлечь звуковую дорожку из видео.")
+            total_seconds = audio.size / SAMPLE_RATE
+            _video_job_update(job_id, total_seconds=round(total_seconds, 3), stage="Распознавание русской речи", progress=10)
+
+            def asr_progress(end_seconds: float) -> None:
+                ratio = min(1.0, max(0.0, end_seconds / max(total_seconds, 0.001)))
+                _video_job_update(job_id, stage="Распознавание русской речи", progress=10 + ratio * 22, processed_seconds=min(end_seconds, total_seconds))
+
+            segments = MODELS.transcribe_ru_segments(audio, asr_progress)
+            if not segments:
+                raise RuntimeError("Русская речь в видео не распознана.")
+
+            _video_job_update(job_id, stage="Подготовка образца голоса", progress=34)
+            _build_voice_reference(audio, segments, reference_wav)
+            MODELS.prepare_voice(reference_wav)
+
+            source_lines: list[str] = []
+            english_lines: list[str] = []
+            tts_sample_rate = int(MODELS.tts.sr)
+            cursor_samples = 0
+
+            with wave.open(str(translated_wav), "wb") as wav_out:
+                wav_out.setnchannels(1)
+                wav_out.setsampwidth(2)
+                wav_out.setframerate(tts_sample_rate)
+
+                for index, segment in enumerate(segments):
+                    if _video_cancel_requested(job_id):
+                        _video_job_update(job_id, state="cancelled", stage="Отменено")
+                        return
+
+                    source_text = segment["text"]
+                    _video_job_update(job_id, stage=f"Перевод фразы {index + 1}/{len(segments)}", progress=36 + (index / max(1, len(segments))) * 10, processed_seconds=float(segment["start"]))
+                    english = MODELS.translate_ru_en(source_text)
+                    if not english:
+                        continue
+
+                    source_lines.append(source_text)
+                    english_lines.append(english)
+                    _video_job_update(
+                        job_id,
+                        stage=f"Озвучка {index + 1}/{len(segments)} клонированным голосом",
+                        progress=46 + (index / max(1, len(segments))) * 44,
+                        source_text="\n".join(source_lines),
+                        translation_text="\n".join(english_lines),
+                    )
+
+                    speech, speech_rate = MODELS.synthesize_en(english)
+                    if speech_rate != tts_sample_rate:
+                        old_x = np.linspace(0.0, 1.0, speech.size, endpoint=False)
+                        new_size = max(1, int(speech.size * tts_sample_rate / speech_rate))
+                        new_x = np.linspace(0.0, 1.0, new_size, endpoint=False)
+                        speech = np.interp(new_x, old_x, speech).astype(np.float32)
+
+                    target_start = max(int(float(segment["start"]) * tts_sample_rate), cursor_samples)
+                    _write_silence(wav_out, target_start - cursor_samples)
+                    speech_pcm = np.clip(speech * 32767.0, -32768, 32767).astype(PCM_DTYPE)
+                    wav_out.writeframesraw(speech_pcm.tobytes())
+                    cursor_samples = target_start + speech_pcm.size
+                    _video_job_update(job_id, processed_seconds=min(float(segment["end"]), total_seconds), progress=46 + ((index + 1) / max(1, len(segments))) * 44)
+
+                minimum_samples = int(total_seconds * tts_sample_rate)
+                _write_silence(wav_out, minimum_samples - cursor_samples)
+                cursor_samples = max(cursor_samples, minimum_samples)
+
+            translated_duration = cursor_samples / tts_sample_rate
+            extra_video = max(0.0, translated_duration - total_seconds)
+            _video_job_update(job_id, stage="Сборка готового MP4", progress=93, processed_seconds=total_seconds)
+
+            command = [ffmpeg, "-y", "-i", str(input_path), "-i", str(translated_wav)]
+            if extra_video > 0.05:
+                command += ["-vf", f"tpad=stop_mode=clone:stop_duration={extra_video + 0.1:.3f}"]
+            command += ["-map", "0:v:0", "-map", "1:a:0", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-shortest", str(output_path)]
+            _run_ffmpeg(command)
+
+            if not output_path.exists() or output_path.stat().st_size < 1024:
+                raise RuntimeError("FFmpeg не создал итоговый MP4.")
+
+            _video_job_update(job_id, state="done", stage="Готово — MP4 собран", progress=100, processed_seconds=total_seconds, download_url=f"/api/video/jobs/{job_id}/download")
+        except Exception as exc:
+            _video_job_update(job_id, state="error", stage="Ошибка обработки", error=str(exc))
+
+
 app = FastAPI(title="Free Local RU→EN Voice Translator")
 
 
@@ -512,6 +749,74 @@ async def health() -> dict:
         "tts_device": MODELS.tts_device,
         "asr_device": MODELS.asr_device,
     }
+
+
+@app.post("/api/video/jobs")
+async def create_video_job(file: UploadFile = File(...)) -> dict:
+    filename = Path(file.filename or "video.mp4").name
+    suffix = Path(filename).suffix.lower() or ".mp4"
+    job_id = uuid.uuid4().hex
+    job_dir = OUTPUT_DIR / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    input_path = job_dir / f"input{suffix}"
+    output_path = job_dir / "translated_en.mp4"
+
+    with input_path.open("wb") as target:
+        while True:
+            chunk = await file.read(1024 * 1024)
+            if not chunk:
+                break
+            target.write(chunk)
+    await file.close()
+    if input_path.stat().st_size == 0:
+        raise HTTPException(status_code=400, detail="Пустой видеофайл.")
+
+    with VIDEO_JOBS_LOCK:
+        VIDEO_JOBS[job_id] = {
+            "state": "queued", "stage": "Файл загружен, запуск обработки",
+            "progress": 1.0, "processed_seconds": 0.0, "total_seconds": None,
+            "elapsed_seconds": 0.0, "source_text": "", "translation_text": "",
+            "error": None, "download_url": None, "cancel_requested": False,
+            "started_at": time.monotonic(), "input_path": str(input_path), "output_path": str(output_path),
+        }
+
+    task = asyncio.create_task(asyncio.to_thread(_process_video_job, job_id, input_path, output_path))
+    VIDEO_TASKS.add(task)
+    task.add_done_callback(VIDEO_TASKS.discard)
+    return _video_job_public(job_id)
+
+
+@app.get("/api/video/jobs/{job_id}")
+async def get_video_job(job_id: str) -> dict:
+    try:
+        return _video_job_public(job_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Задача не найдена.")
+
+
+@app.post("/api/video/jobs/{job_id}/cancel")
+async def cancel_video_job(job_id: str) -> dict:
+    with VIDEO_JOBS_LOCK:
+        job = VIDEO_JOBS.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Задача не найдена.")
+        job["cancel_requested"] = True
+        job["stage"] = "Остановка после текущей фразы"
+    return _video_job_public(job_id)
+
+
+@app.get("/api/video/jobs/{job_id}/download")
+async def download_video_job(job_id: str):
+    with VIDEO_JOBS_LOCK:
+        job = VIDEO_JOBS.get(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Задача не найдена.")
+        if job.get("state") != "done":
+            raise HTTPException(status_code=409, detail="Видео ещё не готово.")
+        output_path = Path(job["output_path"])
+    if not output_path.exists():
+        raise HTTPException(status_code=404, detail="Итоговый файл не найден.")
+    return FileResponse(output_path, media_type="video/mp4", filename="translated_en_voice.mp4")
 
 
 @app.websocket("/ws/translate")
