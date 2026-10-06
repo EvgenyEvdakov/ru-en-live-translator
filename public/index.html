@@ -40,6 +40,12 @@
         <label for="videoFile">Выберите видеофайл</label>
         <input id="videoFile" type="file" accept="video/*" />
         <video id="videoPreview" controls playsinline></video>
+        <p class="file-processing-note">Режим файла создаёт новый MP4. Исходное видео не воспроизводится во время обработки — сервер распознаёт речь, переводит её, клонирует голос и затем собирает готовый файл.</p>
+        <div id="resultBox" class="result-box hidden">
+          <h3>Готовое видео</h3>
+          <video id="resultVideo" controls playsinline></video>
+          <a id="downloadResult" class="download-result" href="#" download="translated_en_voice.mp4">Скачать готовый MP4</a>
+        </div>
       </div>
 
       <div class="actions">
