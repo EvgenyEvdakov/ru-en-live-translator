@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RU → EN Live Translator</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <p class="eyebrow">REALTIME TRANSLATION</p>
+      <h1>Русский <span>→</span> English</h1>
+      <p class="lead">Переводите речь с микрофона, звук вкладки/видео или локальный видеофайл в английскую речь и субтитры почти в реальном времени.</p>
+    </section>
+
+    <section class="panel">
+      <div class="mode-grid" role="radiogroup" aria-label="Источник аудио">
+        <button class="mode active" data-mode="mic" type="button">
+          <strong>Микрофон</strong>
+          <small>Живая речь</small>
+        </button>
+        <button class="mode" data-mode="screen" type="button">
+          <strong>Видео / вкладка</strong>
+          <small>Звук экрана или браузера</small>
+        </button>
+        <button class="mode" data-mode="file" type="button">
+          <strong>Видео файл</strong>
+          <small>MP4, WebM и другое</small>
+        </button>
+      </div>
+
+      <div id="fileBox" class="file-box hidden">
+        <label for="videoFile">Выберите видео</label>
+        <input id="videoFile" type="file" accept="video/*" />
+        <video id="videoPreview" controls playsinline></video>
+      </div>
+
+      <div class="actions">
+        <button id="startBtn" class="primary" type="button">Начать перевод</button>
+        <button id="stopBtn" class="secondary" type="button" disabled>Остановить</button>
+      </div>
+
+      <div class="status-row">
+        <span id="statusDot" class="dot"></span>
+        <span id="status">Готово к запуску</span>
+      </div>
+    </section>
+
+    <section class="transcripts">
+      <article>
+        <header>
+          <span>RU</span>
+          <h2>Исходная речь</h2>
+        </header>
+        <div id="sourceTranscript" class="transcript muted">Русская речь появится здесь…</div>
+      </article>
+      <article class="translated-card">
+        <header>
+          <span>EN</span>
+          <h2>English translation</h2>
+        </header>
+        <div id="translatedTranscript" class="transcript">English subtitles will appear here…</div>
+      </article>
+    </section>
+
+    <section class="notes">
+      <p><strong>Совет:</strong> для перевода YouTube/стрима откройте его в отдельной вкладке, выберите «Видео / вкладка», затем при демонстрации экрана включите передачу звука вкладки.</p>
+      <p>API-ключ хранится только на сервере и не отправляется в браузер.</p>
+    </section>
+  </main>
+
+  <audio id="translatedAudio" autoplay></audio>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
