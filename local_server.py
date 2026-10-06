@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import math
 import os
@@ -22,6 +23,7 @@ os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "120")
 os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "30")
+os.environ.setdefault("TRANSFORMERS_ATTN_IMPLEMENTATION", "eager")
 
 def normalize_proxy_environment() -> None:
     """Ignore unsupported SOCKS4 proxy variables for Hugging Face/httpx.
@@ -132,10 +134,22 @@ class LocalModels:
                 return
             from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 
-            self.tts = ChatterboxMultilingualTTS.from_pretrained(
-                device=self.tts_device,
-                t3_model=os.getenv("CHATTERBOX_T3", "v3"),
-            )
+            loader = ChatterboxMultilingualTTS.from_pretrained
+            params = inspect.signature(loader).parameters
+            kwargs = {"device": self.tts_device}
+
+            # chatterbox-tts 0.1.7 does not accept t3_model; newer builds do.
+            # Use V3 when supported, otherwise load the package's default
+            # multilingual checkpoint instead of crashing.
+            if "t3_model" in params:
+                kwargs["t3_model"] = os.getenv("CHATTERBOX_T3", "v3")
+            else:
+                print(
+                    "[chatterbox] installed version has no t3_model argument; "
+                    "using its default multilingual checkpoint"
+                )
+
+            self.tts = loader(**kwargs)
 
     def transcribe_ru(self, audio: np.ndarray) -> str:
         assert self.asr is not None
@@ -177,19 +191,34 @@ class LocalModels:
     def prepare_voice(self, reference_wav: Path) -> None:
         assert self.tts is not None
         with self._lock:
-            self.tts.prepare_conditionals(str(reference_wav), exaggeration=0.5)
+            prepare = self.tts.prepare_conditionals
+            params = inspect.signature(prepare).parameters
+            kwargs = {}
+            if "exaggeration" in params:
+                kwargs["exaggeration"] = 0.5
+            prepare(str(reference_wav), **kwargs)
 
     def synthesize_en(self, text: str) -> tuple[np.ndarray, int]:
         assert self.tts is not None
         with self._lock:
-            wav = self.tts.generate(
-                text[:300],
-                language_id="en",
-                audio_prompt_path=None,
-                exaggeration=0.5,
-                cfg_weight=0.0,
-                temperature=0.8,
-            )
+            generate = self.tts.generate
+            params = inspect.signature(generate).parameters
+            kwargs = {}
+
+            if "language_id" in params:
+                kwargs["language_id"] = "en"
+            if "audio_prompt_path" in params:
+                kwargs["audio_prompt_path"] = None
+            if "exaggeration" in params:
+                kwargs["exaggeration"] = 0.5
+            if "cfg_weight" in params:
+                # Recommended for cross-language voice transfer to reduce
+                # accent leakage from the Russian reference voice.
+                kwargs["cfg_weight"] = 0.0
+            if "temperature" in params:
+                kwargs["temperature"] = 0.8
+
+            wav = generate(text[:300], **kwargs)
             audio = wav.detach().float().cpu().numpy().reshape(-1)
             sample_rate = int(self.tts.sr)
         return np.clip(audio, -1.0, 1.0), sample_rate
