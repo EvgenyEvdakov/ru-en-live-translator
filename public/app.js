@@ -21,11 +21,31 @@ let fileCaptureStream = null;
 let objectUrl = null;
 let sourceText = "";
 let translatedText = "";
+let starting = false;
 
 function setStatus(message, kind = "idle") {
   status.textContent = message;
   statusDot.classList.toggle("live", kind === "live");
   statusDot.classList.toggle("error", kind === "error");
+}
+
+function friendlyError(error) {
+  if (!error) return "ĞĞµĞ¸Ğ·Ğ²ĞµÑÑ‚Ğ½Ğ°Ñ Ğ¾ÑˆĞ¸Ğ±ĞºĞ°.";
+
+  if (error.name === "NotAllowedError") {
+    return "Ğ”Ğ¾ÑÑ‚ÑƒĞ¿ Ğº Ğ¼Ğ¸ĞºÑ€Ğ¾Ñ„Ğ¾Ğ½Ñƒ/Ğ·Ğ²ÑƒĞºÑƒ Ğ·Ğ°Ğ¿Ñ€ĞµÑ‰Ñ‘Ğ½. Ğ Ğ°Ğ·Ñ€ĞµÑˆĞ¸Ñ‚Ğµ Ğ´Ğ¾ÑÑ‚ÑƒĞ¿ Ğ² Ğ½Ğ°ÑÑ‚Ñ€Ğ¾Ğ¹ĞºĞ°Ñ… Ğ±Ñ€Ğ°ÑƒĞ·ĞµÑ€Ğ° Ğ¸ Ğ¿Ğ¾Ğ¿Ñ€Ğ¾Ğ±ÑƒĞ¹Ñ‚Ğµ ÑĞ½Ğ¾Ğ²Ğ°.";
+  }
+  if (error.name === "NotFoundError") {
+    return "ĞÑƒĞ´Ğ¸Ğ¾ÑƒÑÑ‚Ñ€Ğ¾Ğ¹ÑÑ‚Ğ²Ğ¾ Ğ½Ğµ Ğ½Ğ°Ğ¹Ğ´ĞµĞ½Ğ¾. ĞŸÑ€Ğ¾Ğ²ĞµÑ€ÑŒÑ‚Ğµ Ğ¼Ğ¸ĞºÑ€Ğ¾Ñ„Ğ¾Ğ½ Ğ¸Ğ»Ğ¸ Ğ²Ñ‹Ğ±Ñ€Ğ°Ğ½Ğ½Ñ‹Ğ¹ Ğ¸ÑÑ‚Ğ¾Ñ‡Ğ½Ğ¸Ğº.";
+  }
+  if (error.name === "NotReadableError") {
+    return "Ğ‘Ñ€Ğ°ÑƒĞ·ĞµÑ€ Ğ½Ğµ Ğ¼Ğ¾Ğ¶ĞµÑ‚ Ğ¾Ñ‚ĞºÑ€Ñ‹Ñ‚ÑŒ Ğ°ÑƒĞ´Ğ¸Ğ¾ÑƒÑÑ‚Ñ€Ğ¾Ğ¹ÑÑ‚Ğ²Ğ¾. Ğ’Ğ¾Ğ·Ğ¼Ğ¾Ğ¶Ğ½Ğ¾, ĞµĞ³Ğ¾ Ğ¸ÑĞ¿Ğ¾Ğ»ÑŒĞ·ÑƒĞµÑ‚ Ğ´Ñ€ÑƒĞ³Ğ°Ñ Ğ¿Ñ€Ğ¾Ğ³Ñ€Ğ°Ğ¼Ğ¼Ğ°.";
+  }
+  if (error.name === "AbortError") {
+    return "ĞĞ¿ĞµÑ€Ğ°Ñ†Ğ¸Ñ Ğ±Ñ‹Ğ»Ğ° Ğ¿Ñ€ĞµÑ€Ğ²Ğ°Ğ½Ğ°. ĞŸĞ¾Ğ¿Ñ€Ğ¾Ğ±ÑƒĞ¹Ñ‚Ğµ ĞµÑ‰Ñ‘ Ñ€Ğ°Ğ·.";
+  }
+
+  return error.message || String(error);
 }
 
 function resetTranscriptPlaceholders() {
@@ -35,49 +55,191 @@ function resetTranscriptPlaceholders() {
   translatedTranscript.textContent = "English subtitles will appear hereâ€¦";
 }
 
+function assertBrowserEnvironment() {
+  if (location.protocol === "file:") {
+    throw new Error(
+      "ĞŸÑ€Ğ¸Ğ»Ğ¾Ğ¶ĞµĞ½Ğ¸Ğµ Ğ¾Ñ‚ĞºÑ€Ñ‹Ñ‚Ğ¾ ĞºĞ°Ğº Ñ„Ğ°Ğ¹Ğ». Ğ—Ğ°Ğ¿ÑƒÑÑ‚Ğ¸Ñ‚Ğµ `npm run dev` Ğ¸ Ğ¾Ñ‚ĞºÑ€Ğ¾Ğ¹Ñ‚Ğµ http://localhost:3000 â€” Ğ½Ğ°Ğ¿Ñ€ÑĞ¼ÑƒÑ index.html Ğ¿ĞµÑ€ĞµĞ²Ğ¾Ğ´ Ñ€Ğ°Ğ±Ğ¾Ñ‚Ğ°Ñ‚ÑŒ Ğ½Ğµ Ğ¼Ğ¾Ğ¶ĞµÑ‚."
+    );
+  }
+
+  if (!window.isSecureContext) {
+    throw new Error(
+      "Ğ‘Ñ€Ğ°ÑƒĞ·ĞµÑ€ Ñ€Ğ°Ğ·Ñ€ĞµÑˆĞ°ĞµÑ‚ Ğ¼Ğ¸ĞºÑ€Ğ¾Ñ„Ğ¾Ğ½ Ñ‚Ğ¾Ğ»ÑŒĞºĞ¾ Ğ² Ğ±ĞµĞ·Ğ¾Ğ¿Ğ°ÑĞ½Ğ¾Ğ¼ ĞºĞ¾Ğ½Ñ‚ĞµĞºÑÑ‚Ğµ. Ğ˜ÑĞ¿Ğ¾Ğ»ÑŒĞ·ÑƒĞ¹Ñ‚Ğµ http://localhost:3000 Ğ¸Ğ»Ğ¸ HTTPS."
+    );
+  }
+
+  if (!navigator.mediaDevices) {
+    throw new Error(
+      "Ğ’ ÑÑ‚Ğ¾Ğ¼ Ğ±Ñ€Ğ°ÑƒĞ·ĞµÑ€Ğµ MediaDevices Ğ½ĞµĞ´Ğ¾ÑÑ‚ÑƒĞ¿ĞµĞ½. ĞÑ‚ĞºÑ€Ğ¾Ğ¹Ñ‚Ğµ Ğ¿Ñ€Ğ¸Ğ»Ğ¾Ğ¶ĞµĞ½Ğ¸Ğµ Ñ‡ĞµÑ€ĞµĞ· http://localhost:3000 Ğ² Chrome Ğ¸Ğ»Ğ¸ Edge."
+    );
+  }
+
+  if (!window.RTCPeerConnection) {
+    throw new Error("Ğ­Ñ‚Ğ¾Ñ‚ Ğ±Ñ€Ğ°ÑƒĞ·ĞµÑ€ Ğ½Ğµ Ğ¿Ğ¾Ğ´Ğ´ĞµÑ€Ğ¶Ğ¸Ğ²Ğ°ĞµÑ‚ WebRTC, Ğ½ĞµĞ¾Ğ±Ñ…Ğ¾Ğ´Ğ¸Ğ¼Ñ‹Ğ¹ Ğ´Ğ»Ñ Ğ¿ĞµÑ€ĞµĞ²Ğ¾Ğ´Ğ°.");
+  }
+}
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function checkServer() {
+  let response;
+  try {
+    response = await fetchWithTimeout("/api/health", { cache: "no-store" }, 5000);
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("Ğ›Ğ¾ĞºĞ°Ğ»ÑŒĞ½Ñ‹Ğ¹ ÑĞµÑ€Ğ²ĞµÑ€ Ğ½Ğµ Ğ¾Ñ‚Ğ²ĞµÑ‚Ğ¸Ğ» Ğ·Ğ° 5 ÑĞµĞºÑƒĞ½Ğ´. ĞŸĞµÑ€ĞµĞ·Ğ°Ğ¿ÑƒÑÑ‚Ğ¸Ñ‚Ğµ `npm run dev`.");
+    }
+    throw new Error(
+      "ĞĞµ ÑƒĞ´Ğ°Ğ»Ğ¾ÑÑŒ ÑĞ²ÑĞ·Ğ°Ñ‚ÑŒÑÑ Ñ Ğ»Ğ¾ĞºĞ°Ğ»ÑŒĞ½Ñ‹Ğ¼ ÑĞµÑ€Ğ²ĞµÑ€Ğ¾Ğ¼. Ğ—Ğ°Ğ¿ÑƒÑÑ‚Ğ¸Ñ‚Ğµ `npm install`, Ğ·Ğ°Ñ‚ĞµĞ¼ `npm run dev`, Ğ¸ Ğ¾Ñ‚ĞºÑ€Ğ¾Ğ¹Ñ‚Ğµ http://localhost:3000."
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(`Ğ›Ğ¾ĞºĞ°Ğ»ÑŒĞ½Ñ‹Ğ¹ ÑĞµÑ€Ğ²ĞµÑ€ Ğ²ĞµÑ€Ğ½ÑƒĞ» HTTP ${response.status}. ĞŸĞµÑ€ĞµĞ·Ğ°Ğ¿ÑƒÑÑ‚Ğ¸Ñ‚Ğµ npm run dev.`);
+  }
+
+  const payload = await response.json();
+  if (!payload.configured) {
+    throw new Error(
+      "ĞĞ° ÑĞµÑ€Ğ²ĞµÑ€Ğµ Ğ½Ğµ Ğ½Ğ°ÑÑ‚Ñ€Ğ¾ĞµĞ½ OPENAI_API_KEY. Ğ¡ĞºĞ¾Ğ¿Ğ¸Ñ€ÑƒĞ¹Ñ‚Ğµ .env.example Ğ² .env, Ğ²ÑÑ‚Ğ°Ğ²ÑŒÑ‚Ğµ ĞºĞ»ÑÑ‡ Ğ¸ Ğ¿ĞµÑ€ĞµĞ·Ğ°Ğ¿ÑƒÑÑ‚Ğ¸Ñ‚Ğµ `npm run dev`."
+    );
+  }
+
+  return payload;
+}
+
+function waitForEvent(target, eventName, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    const onEvent = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("Ğ‘Ñ€Ğ°ÑƒĞ·ĞµÑ€ Ğ½Ğµ ÑĞ¼Ğ¾Ğ³ Ğ¿Ñ€Ğ¾Ñ‡Ğ¸Ñ‚Ğ°Ñ‚ÑŒ Ğ²Ñ‹Ğ±Ñ€Ğ°Ğ½Ğ½Ñ‹Ğ¹ Ğ²Ğ¸Ğ´ĞµĞ¾Ñ„Ğ°Ğ¹Ğ»."));
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error(`ĞĞµ Ğ´Ğ¾Ğ¶Ğ´Ğ°Ğ»ÑÑ ÑĞ¾Ğ±Ñ‹Ñ‚Ğ¸Ñ ${eventName} Ğ¾Ñ‚ Ğ²Ğ¸Ğ´ĞµĞ¾Ñ„Ğ°Ğ¹Ğ»Ğ°.`));
+    }, timeoutMs);
+
+    function cleanup() {
+      clearTimeout(timer);
+      target.removeEventListener(eventName, onEvent);
+      target.removeEventListener("error", onError);
+    }
+
+    target.addEventListener(eventName, onEvent, { once: true });
+    target.addEventListener("error", onError, { once: true });
+  });
+}
+
+function waitForAudioTrack(stream, timeoutMs = 2000) {
+  const existing = stream.getAudioTracks()[0];
+  if (existing) return Promise.resolve(existing);
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      stream.removeEventListener("addtrack", onTrack);
+      reject(new Error("ĞĞµ ÑƒĞ´Ğ°Ğ»Ğ¾ÑÑŒ Ğ¿Ğ¾Ğ»ÑƒÑ‡Ğ¸Ñ‚ÑŒ Ğ°ÑƒĞ´Ğ¸Ğ¾Ğ´Ğ¾Ñ€Ğ¾Ğ¶ĞºÑƒ Ğ²Ğ¸Ğ´ĞµĞ¾. ĞŸÑ€Ğ¾Ğ²ĞµÑ€ÑŒÑ‚Ğµ, Ñ‡Ñ‚Ğ¾ Ğ² Ñ„Ğ°Ğ¹Ğ»Ğµ Ğ´ĞµĞ¹ÑÑ‚Ğ²Ğ¸Ñ‚ĞµĞ»ÑŒĞ½Ğ¾ ĞµÑÑ‚ÑŒ Ğ·Ğ²ÑƒĞº."));
+    }, timeoutMs);
+
+    function onTrack(event) {
+      if (event.track?.kind !== "audio") return;
+      clearTimeout(timer);
+      stream.removeEventListener("addtrack", onTrack);
+      resolve(event.track);
+    }
+
+    stream.addEventListener("addtrack", onTrack);
+  });
+}
+
 modeButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    if (pc) return;
+    if (pc || starting) return;
     mode = button.dataset.mode;
     modeButtons.forEach((item) => item.classList.toggle("active", item === button));
     fileBox.classList.toggle("hidden", mode !== "file");
+
+    if (mode === "mic") setStatus("Ğ ĞµĞ¶Ğ¸Ğ¼: Ğ¼Ğ¸ĞºÑ€Ğ¾Ñ„Ğ¾Ğ½. ĞĞ°Ğ¶Ğ¼Ğ¸Ñ‚Ğµ Â«ĞĞ°Ñ‡Ğ°Ñ‚ÑŒ Ğ¿ĞµÑ€ĞµĞ²Ğ¾Ğ´Â».");
+    if (mode === "screen") setStatus("Ğ ĞµĞ¶Ğ¸Ğ¼: Ğ·Ğ²ÑƒĞº Ğ²ĞºĞ»Ğ°Ğ´ĞºĞ¸/ÑĞºÑ€Ğ°Ğ½Ğ°. ĞĞ°Ğ¶Ğ¼Ğ¸Ñ‚Ğµ Â«ĞĞ°Ñ‡Ğ°Ñ‚ÑŒ Ğ¿ĞµÑ€ĞµĞ²Ğ¾Ğ´Â».");
+    if (mode === "file") setStatus("Ğ ĞµĞ¶Ğ¸Ğ¼: Ğ²Ğ¸Ğ´ĞµĞ¾Ñ„Ğ°Ğ¹Ğ». Ğ’Ñ‹Ğ±ĞµÑ€Ğ¸Ñ‚Ğµ Ñ„Ğ°Ğ¹Ğ» Ğ¸ Ğ½Ğ°Ğ¶Ğ¼Ğ¸Ñ‚Ğµ Â«ĞĞ°Ñ‡Ğ°Ñ‚ÑŒ Ğ¿ĞµÑ€ĞµĞ²Ğ¾Ğ´Â».");
   });
 });
 
 videoFile.addEventListener("change", () => {
   if (objectUrl) URL.revokeObjectURL(objectUrl);
   const file = videoFile.files?.[0];
+
   if (!file) {
+    videoPreview.pause();
     videoPreview.removeAttribute("src");
+    videoPreview.load();
     videoPreview.classList.remove("has-file");
+    setStatus("Ğ’Ñ‹Ğ±ĞµÑ€Ğ¸Ñ‚Ğµ Ğ²Ğ¸Ğ´ĞµĞ¾Ñ„Ğ°Ğ¹Ğ».");
     return;
   }
+
   objectUrl = URL.createObjectURL(file);
   videoPreview.src = objectUrl;
   videoPreview.classList.add("has-file");
+  videoPreview.load();
+  setStatus(`Ğ¤Ğ°Ğ¹Ğ» Ğ²Ñ‹Ğ±Ñ€Ğ°Ğ½: ${file.name}. ĞĞ°Ğ¶Ğ¼Ğ¸Ñ‚Ğµ Â«ĞĞ°Ñ‡Ğ°Ñ‚ÑŒ Ğ¿ĞµÑ€ĞµĞ²Ğ¾Ğ´Â».`);
 });
 
 async function getSourceAudio() {
   if (mode === "mic") {
+    setStatus("Ğ‘Ñ€Ğ°ÑƒĞ·ĞµÑ€ Ğ´Ğ¾Ğ»Ğ¶ĞµĞ½ Ğ·Ğ°Ğ¿Ñ€Ğ¾ÑĞ¸Ñ‚ÑŒ Ğ´Ğ¾ÑÑ‚ÑƒĞ¿ Ğº Ğ¼Ğ¸ĞºÑ€Ğ¾Ñ„Ğ¾Ğ½Ñƒâ€¦");
     sourceStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true },
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      },
       video: false
     });
+
+    const audioTrack = sourceStream.getAudioTracks()[0];
+    if (!audioTrack) throw new Error("Ğ‘Ñ€Ğ°ÑƒĞ·ĞµÑ€ Ğ½Ğµ Ğ²ĞµÑ€Ğ½ÑƒĞ» Ğ°ÑƒĞ´Ğ¸Ğ¾Ğ´Ğ¾Ñ€Ğ¾Ğ¶ĞºÑƒ Ğ¼Ğ¸ĞºÑ€Ğ¾Ñ„Ğ¾Ğ½Ğ°.");
+    setStatus(`ĞœĞ¸ĞºÑ€Ğ¾Ñ„Ğ¾Ğ½ Ğ²ĞºĞ»ÑÑ‡Ñ‘Ğ½: ${audioTrack.label || "audio input"}. ĞŸĞ¾Ğ´ĞºĞ»ÑÑ‡Ğ°Ñ Ğ¿ĞµÑ€ĞµĞ²Ğ¾Ğ´â€¦`);
     return sourceStream;
   }
 
   if (mode === "screen") {
+    setStatus("Ğ’Ñ‹Ğ±ĞµÑ€Ğ¸Ñ‚Ğµ Ğ²ĞºĞ»Ğ°Ğ´ĞºÑƒ/ÑĞºÑ€Ğ°Ğ½ Ğ¸ Ğ¾Ğ±ÑĞ·Ğ°Ñ‚ĞµĞ»ÑŒĞ½Ğ¾ Ğ²ĞºĞ»ÑÑ‡Ğ¸Ñ‚Ñ‚Ğµ Ğ¿ĞµÑ€ĞµĞ´Ğ°Ñ‡Ñƒ Ğ·Ğ²ÑƒĞºĞâ€¦");
     displayStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
       audio: true
     });
+
     const audioTrack = displayStream.getAudioTracks()[0];
     if (!audioTrack) {
       displayStream.getTracks().forEach((track) => track.stop());
       displayStream = null;
-      throw new Error("Ğ—Ğ²ÑƒĞº Ğ½Ğµ Ğ¿ĞµÑ€ĞµĞ´Ğ°Ñ‘Ñ‚ÑÑ. ĞŸÑ€Ğ¸ Ğ²Ñ‹Ğ±Ğ¾Ñ€Ğµ Ğ²ĞºĞ»Ğ°Ğ´ĞºĞ¸ Ğ²ĞºĞ»ÑÑ‡Ğ¸Ñ‚Ğµ Â«ĞŸĞ¾Ğ´ĞµĞ»Ğ¸Ñ‚ÑŒÑÑ Ğ°ÑƒĞ´Ğ¸Ğ¾/Ğ·Ğ²ÑƒĞºĞ¾Ğ¼ Ğ²ĞºĞ»Ğ°Ğ´ĞºĞ¸Â».");
+      throw new Error(
+        "Ğ—Ğ²ÑƒĞº Ğ½Ğµ Ğ¿ĞµÑ€ĞµĞ´Ğ°Ñ‘Ñ‚ÑÑ. ĞŸÑ€Ğ¸ Ğ²Ñ‹Ğ±Ğ¾Ñ€Ğµ Ğ²ĞºĞ»Ğ°Ğ´ĞºĞ¸ Ğ²ĞºĞ»ÑÑ‡Ğ¸Ñ‚Ğµ Â«ĞŸĞ¾Ğ´ĞµĞ»Ğ¸Ñ‚ÑŒÑÑ Ğ°ÑƒĞ´Ğ¸Ğ¾Â» / Â«Share tab audioÂ»."
+      );
     }
+
+    const videoTrack = displayStream.getVideoTracks()[0];
+    if (videoTrack) {
+      videoTrack.addEventListener("ended", () => {
+        if (pc) stopTranslation();
+      }, { once: true });
+    }
+
     sourceStream = new MediaStream([audioTrack]);
+    setStatus("Ğ—Ğ²ÑƒĞº Ğ²ĞºĞ»Ğ°Ğ´ĞºĞ¸ Ğ¿Ğ¾Ğ»ÑƒÑ‡ĞµĞ½. ĞŸĞ¾Ğ´ĞºĞ»ÑÑ‡Ğ°Ñ Ğ¿ĞµÑ€ĞµĞ²Ğ¾Ğ´â€¦");
     return sourceStream;
   }
 
@@ -86,132 +248,52 @@ async function getSourceAudio() {
       throw new Error("Ğ¡Ğ½Ğ°Ñ‡Ğ°Ğ»Ğ° Ğ²Ñ‹Ğ±ĞµÑ€Ğ¸Ñ‚Ğµ Ğ²Ğ¸Ğ´ĞµĞ¾Ñ„Ğ°Ğ¹Ğ».");
     }
 
-    await videoPreview.play();
+    if (videoPreview.readyState < HTMLMediaElement.HAVE_METADATA_) {
+      setStatus("Ğ§Ğ¸Ñ‚Ğ°Ñ Ğ²Ğ¸Ğ´ĞµĞ¾Ñ„Ğ°Ğ¹Ğ·â€¦");
+      await waitForEvent(videoPreview, "loadedmetadata");
+    }
+
     const capture = videoPreview.captureStream?.bind(videoPreview)
       || videoPreview.mozCaptureStream?.bind(videoPreview);
 
     if (!capture) {
-      throw new Error("Ğ­Ñ‚Ğ¾Ñ‚ Ğ±Ñ€Ğ°ÑƒĞ·ĞµÑ€ Ğ½Ğµ ÑƒĞ¼ĞµĞµÑ‚ Ğ·Ğ°Ñ…Ğ²Ğ°Ñ‚Ñ‹Ğ²Ğ°Ñ‚ÑŒ Ğ·Ğ²ÑƒĞº Ğ»Ğ¾ĞºĞ°Ğ»ÑŒĞ½Ğ¾Ğ³Ğ¾ Ğ²Ğ¸Ğ´ĞµĞ¾. Ğ˜ÑĞ¿Ğ¾Ğ»ÑŒĞ·ÑƒĞ¹Ñ‚Ğµ Chrome/Edge Ğ¸Ğ»Ğ¸ Ñ€ĞµĞ¶Ğ¸Ğ¼ Â«Ğ’Ğ¸Ğ´ĞµĞ¾ / Ğ²ĞºĞ»Ğ°Ğ´ĞºĞ°Â».");
+      throw new Error(
+        "Ğ­Ñ‚Ğ¾Ñ‚ Ğ±Ñ€Ğ°ÑƒĞ·ĞµÑ€ Ğ½Ğµ ÑƒĞ¼ĞµĞµÑ‚ Ğ·Ğ°Ñ…Ğ²Ğ°Ñ‚Ñ‹Ğ²Ğ°Ñ‚ÑŒ Ğ·Ğ²ÑƒĞº Ğ¿Ğ¾ĞºĞ°Ğ»ÑŒĞ½Ğ¾Ğ³Ğ¾ Ğ²Ğ¸Ğ´ĞµĞ¾. Ğ˜ÑĞ¿Ğ¾Ğ»ÑŒĞ·ÑƒĞ¹Ñ‚Ğµ Chrome/Edge Ğ¸Ğ»Ğ¸ Ñ€ĞµĞ¶Ğ¸Ğ¼ Â«Ğ’Ğ¸Ğ´ĞµĞ¾ / Ğ²ĞºĞ»Ğ°Ğ´ĞºĞ°Â»."
+      );
     }
 
+    // Capture before play so Chromium can expose the media tracks as playback starts.
     fileCaptureStream = capture();
-    const audioTrack = fileCaptureStream.getAudioTracks()[0];
-    if (!audioTrack) {
-      throw new Error("ĞĞµ ÑƒĞ´Ğ°Ğ»Ğ¾ÑÑŒ Ğ¿Ğ¾Ğ»ÑƒÑ‡Ğ¸Ñ‚ÑŒ Ğ°ÑƒĞ´Ğ¸Ğ¾Ğ´Ğ¾Ñ€Ğ¾Ğ¶ĞºÑƒ Ğ²Ğ¸Ğ´ĞµĞ¾.");
+
+    try {
+      await videoPreview.play();
+    } catch (error) {
+      throw new Error(`ĞĞµ ÑƒĞ´Ğ°Ğ»Ğ¾ÑÑŒ Ğ·Ğ°Ğ¿ÑƒÑÑ‚Ğ¸Ñ‚ÑŒ Ñ‚Ğ¸Ğ´ĞµĞ¾: ${friendlyError(error)}`);
     }
 
+    const audioTrack = await waitForAudioTrack(fileCaptureStream);
     sourceStream = new MediaStream([audioTrack]);
+    setStatus("ĞÑƒĞ´Ğ¸Ğ¾Ğ´Ğ¾Ñ€Ğ¾Ğ¶ĞºĞ° Ğ²Ğ¸Ğ´ĞµĞ¾ Ğ¿Ğ¾Ğ»ÑƒÑ‡ĞµĞ½Ğ°. ĞŸĞ¾Ğ´ĞºĞ»ÑÑ‡Ğ°Ñ Ğ¿ĞµÑ€ĞµĞ²Ğ¾Ğ·â€¦");
     return sourceStream;
   }
 
-  throw new Error("ĞĞµĞ¸Ğ·Ğ²ĞµÑÑ‚Ğ½Ñ‹Ğ¹ Ğ¸ÑÑ‚Ğ¾Ñ‡Ğ½Ğ¸Ğº Ğ°ÑƒĞ´Ğ¸Ğ¾.");
-}
-
-async function createClientSecret() {
-  const response = await fetch("/api/session", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ targetLanguage: "en" })
-  });
-
-  const payload = await response.json();
-  if (!response.ok) {
-    throw new Error(payload.error || "ĞĞµ ÑƒĞ´Ğ°Ğ»Ğ¾ÑÑŒ ÑĞ¾Ğ·Ğ´Ğ°Ñ‚ÑŒ ÑĞµÑÑĞ¸Ñ Ğ¿ĞµÑ€ĞµĞ²Ğ¾Ğ´Ğ°.");
-  }
-  if (!payload.value) {
-    throw new Error("Ğ¡ĞµÑ€Ğ²ĞµÑ€ Ğ½Ğµ Ğ²ĞµÑ€Ğ½ÑƒĞ» Ğ²Ñ€ĞµĞ¼ĞµĞ½Ğ½Ñ‹Ğ¹ ĞºĞ»ÑÑ‡ Realtime API.");
-  }
-  return payload.value;
-}
-
-function onRealtimeEvent(event) {
-  if (event.type === "session.input_transcript.delta") {
-    sourceText += event.delta || "";
-    sourceTranscript.textContent = sourceText || "Ğ ÑƒÑÑĞºĞ°Ñ Ñ€ĞµÑ‡ÑŒ Ğ¿Ğ¾ÑĞ²Ğ¸Ñ‚ÑÑ Ğ·Ğ´ĞµÑÑŒâ€¦";
-  }
-
-  if (event.type === "session.output_transcript.delta") {
-    translatedText += event.delta || "";
-    translatedTranscript.textContent = translatedText || "English subtitles will appear hereâ€¦";
-  }
-
-  if (event.type === "error") {
-    console.error("Realtime error", event);
-    setStatus(event.error?.message || "ĞÑˆĞ¸Ğ±ĞºĞ° Realtime API", "error");
-  }
-}
-
-async function startTranslation() {
-  startBtn.disabled = true;
-  modeButtons.forEach((button) => (button.disabled = true));
-  resetTranscriptPlaceholders();
-  setStatus("ĞŸĞ¾Ğ»ÑƒÑ‡Ğ°Ñ Ğ´Ğ¾ÑÑ‚ÑƒĞ¿ Ğº Ğ°ÑƒĞ´Ğ¸Ğ¾â€¦");
-
-  try {
-    const [stream, clientSecret] = await Promise.all([
-      getSourceAudio(),
-      createClientSecret()
-    ]);
-
-    pc = new RTCPeerConnection();
-    pc.addTrack(stream.getAudioTracks()[0], stream);
-
-    pc.ontrack = ({ streams }) => {
-      translatedAudio.srcObject = streams[0];
-      translatedAudio.play().catch(() => {});
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (!pc) return;
-      if (pc.connectionState === "connected") {
-        setStatus("ĞŸĞµÑ€ĞµĞ²Ğ¾Ğ´ Ğ¸Ğ´Ñ‘Ñ‚: Ñ€ÑƒÑÑĞºĞ¸Ğ¹ â†’ Ğ°Ğ½Ğ³Ğ»Ğ¸Ğ¹ÑĞºĞ¸Ğ¹", "live");
-      } else if (["failed", "disconnected"].includes(pc.connectionState)) {
-        setStatus("Ğ¡Ğ¾ĞµĞ´Ğ¸Ğ½ĞµĞ½Ğ¸Ğµ Ñ Ğ¿ĞµÑ€ĞµĞ²Ğ¾Ğ´Ñ‡Ğ¸ĞºĞ¾Ğ¼ Ğ¿Ğ¾Ñ‚ĞµÑ€ÑĞ½Ğ¾", "error");
-      }
-    };
-
-    dataChannel = pc.createDataChannel("oai-events");
-    dataChannel.onmessage = ({ data }) => {
-      try {
-        onRealtimeEvent(JSON.parse(data));
-      } catch (error) {
-        console.warn("Bad realtime event", error);
-      }
-    };
-
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    const sdpResponse = await fetch(
-      "https://api.openai.com/v1/realtime/translations/calls",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${clientSecret}`,
-          "Content-Type": "application/sdp"
-        },
-        body: offer.sdp
-      }
-    );
-
-    if (!sdpResponse.ok) {
-      throw new Error(await sdpResponse.text());
+  throw new Error("ĞĞµĞ¸Ğ·Ğ²ĞµÑÑ‚Ğ½Ñ‹Ğ¹ Ğ¸ÑÑ‚Ğ¾Ñ‡Ğ½Ğ¸Ğº#BÃFBÓBãBø¸ˆ¤ì)ô()…Íå¹Œ™Õ¹Ñ¥½¸É•…Ñ•±¥•¹ÑM•É•Ğ ¤ì(€±•ĞÉ•ÍÁ½¹Í”ì((€ÑÉäì(€€€É•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ¡]¥Ñ¡Q¥µ•½ÕĞ (€€€€€€ˆ½…Á¤½Í•ÍÍ¥½¸ˆ°(€€€€€ì(€€€€€€€µ•Ñ¡½è€‰A=MPˆ°(€€€€€€€¡•…‘•ÉÌèì€‰½¹Ñ•¹ĞµQåÁ”ˆè€‰…ÁÁ±¥…Ñ¥½¸½©Í½¸ˆô°(€€€€€€€‰½‘äè)M=8¹ÍÑÉ¥¹¥™ä¡ìÑ…É•Ñ1…¹Õ…”è€‰•¸ˆô¤(€€€€€ô°(€€€€€€ÄÔÀÀÀ(€€€€¤ì(€ô…Ñ €¡•ÉÉ½È¤ì(€€€¥˜€¡•ÉÉ½È¹¹…µ”€ôôô€‰‰½ÉÑÉÉ½Èˆ¤ì(€€€€€Ñ¡É½Ü¹•ÜÉÉ½È ‰=Á•¹$A$ƒB÷BÔƒBûFBËB×FBãBìƒBßBÀ€ÄÔƒFB×BëFB÷BĞ¸ƒBFBûBËB×FF3FBÔƒBãB÷FB×FB÷B×FƒBàƒBÿBûBÿFBûBÇFBçFBÔƒFB÷BûBËBÀ¸ˆ¤ì(€€€ô(€€€Ñ¡É½Ü¹•ÜÉÉ½È £BwBÔƒFBÓBÃBïBûFF0ƒFBûBßBÓBÃFF0ƒFB×FFBãF8ƒBÿB×FB×BËBûBÓBÀè€‘íÉ¥•¹‘±åÉÉ½È¡•ÉÉ½È¥ô¤¤ì€(€ô((€±•ĞÁ…å±½…ì(€ÑÉäì(€€€Á…å±½…€ô…İ…¥ĞÉ•ÍÁ½¹Í”¹©Í½¸ ¤ì(€ô…Ñ ì(€€€Ñ¡É½Ü¹•ÜÉÉ½È £B‡B×FBËB×F ƒBËB×FB÷FBìƒB÷B×BëBûFFB×BëFB÷F/BäƒBûFBËB×F€¡!QQ@€‘íÉ•ÍÁ½¹Í”¹ÍÑ…ÑÕÍô¤¸¤¤ì(€ô((€¥˜€ …É•ÍÁ½¹Í”¹½¬¤ì(€€€Ñ¡É½Ü¹•ÜÉÉ½È¡Á…å±½…¹•ÉÉ½Èñğ€£BwBÔƒFBÓBÃBïBûFF0ƒFBûBßBÓBÃFF0ƒFB×FFBãF8ƒBÿB×FB×BËBûBÓBÀ€¡!QQ@€‘íÉ•ÍÁ½¹Í”¹ÍÑ…ÑÕÍô¤¸¤¤ì(€ô((€¥˜€ …Á…å±½…¹Ù…±Õ”¤ì(€€€Ñ¡É½Ü¹•ÜÉÉ½È ‹B‡B×FBËB×F ƒB÷BÔƒBËB×FB÷FBìƒBËFB×BóB×B÷B÷F/BäƒBëBïF;FI•…±Ñ¥µ”A$¸ˆ¤ì(€ô((€É•ÑÕÉ¸Á…å±½…¹Ù…±Õ”ì)ô()™Õ¹Ñ¥½¸½¹I•…±Ñ¥µ•Ù•¹Ğ¡•Ù•¹Ğ¤ì(€¥˜€¡•Ù•¹Ğ¹ÑåÁ”€ôôô€‰Í•ÍÍ¥½¸¹É•…Ñ•ˆ¤ì(€€€Í•ÑMÑ…ÑÕÌ ‰I•…±Ñ¥µ”·FB×FFBãF<ƒB×FBûBßBÓBÃB÷BÀ¸ƒBGBÓFƒFFFFBëFF8ƒFB×FF3Š˜ˆ°€‰±¥Ù”ˆ¤ì(€ô((€¥˜€¡•Ù•¹Ğ¹ÑåÁ”€ôôô€‰Í•ÍÍ¥½¸¹¥¹ÁÕÑ}ÑÉ…¹ÍÉ¥ÁĞ¹‘•±Ñ„ˆ¤ì(€€€Í½ÕÉ•Q•áĞ€¬ô•Ù•¹Ğ¹‘•±Ñ„ñğ€ˆˆì(€€€Í½ÕÉ•QÉ…¹ÍÉ¥ÁĞ¹Ñ•áÑ½¹Ñ•¹Ğ€ôÍ½ÕÉ•Q•áĞñğ€‹BƒFFFBëBÃF<ƒFB×FF0ƒBÿBûF?BËBãFFF<ƒBßBÓB×FF3Š˜ˆì(€ô((€¥˜€¡•Ù•¹Ğ¹ÑåÁ”€ôôô€‰Í•ÍÍ¥½¸¹½ÕÑÁÕÑ}ÑÉ…¹ÍÉ¥ÁĞ¹‘•±Ñ„ˆ¤ì(€€€ÑÉ…¹Í±…Ñ•‘Q•áĞ€¬ô•Ù•¹Ğ¹‘•±Ñ„ñğ€ˆˆì(€€€ÑÉ…¹Í±…Ñ•‘QÉ…¹ÍÉ¥ÁĞ¹Ñ•áÑ½¹Ñ•¹Ğ€ôÑÉ…¹Í±…Ñ•‘Q•áĞñğ€‰¹±¥Í ÍÕ‰Ñ¥Ñ±•Ìİ¥±°…ÁÁ•…È¡•É—Š˜ˆì(€ô((€¥˜€¡•Ù•¹Ğ¹ÑåÁ”€ôôô€‰•ÉÉ½Èˆ¤ì(€€€½¹Í½±”¹•ÉÉ½È ‰I•…±Ñ¥µ”•ÉÉ½Èˆ°•Ù•¹Ğ¤ì(€€€Í•ÑMÑ…ÑÕÌ¡•Ù•¹Ğ¹•ÉÉ½Èü¹µ•ÍÍ…”ñğ€‹B{F#BãBÇBëBÀI•…±Ñ¥µ”A$ˆ°€‰•ÉÉ½Èˆ¤ì(€ô)ô()…Íå¹Œ™Õ¹Ñ¥½¸½¹¹•ÑI•…±Ñ¥µ”¡ÍÑÉ•…´°±¥•¹ÑM•É•Ğ¤ì(€ÁŒ€ô¹•ÜIQA••É½¹¹•Ñ¥½¸ ¤ì(€½¹ÍĞ…Õ‘¥½QÉ…¬€ôÍÑÉ•…´¹•ÑÕ‘¥½QÉ…­Ì ¥lÁtì((€¥˜€ ……Õ‘¥½QÉ…¬¤ì(€€€Ñ¡É½Ü¹•ÜÉÉ½È ‹BwB×FƒBÃFBÓBãBûBÓBûFBûBÛBëBàƒBÓBïF<ƒBûFBÿFBÃBËBëBàƒBÈƒBÿB×FB×BËBûBÓFBãBè¸ˆ¤ì(€ô((€ÁŒ¹…‘‘QÉ…¬¡…Õ‘¥½QÉ…¬°ÍÑÉ•…´¤ì((€ÁŒ¹½¹ÑÉ…¬€ô€¡ìÍÑÉ•…µÌ°ÑÉ…¬ô¤€ôøì(€€€½¹ÍĞÉ•µ½Ñ•MÑÉ•…´€ôÍÑÉ•…µÍlÁtñğ¹•Ü5•‘¥…MÑÉ•…´¡mÑÉ…­t¤ì(€€€ÑÉ…¹Í±…Ñ•‘Õ‘¥¼¹ÍÉ=‰©•Ğ€ôÉ•µ½Ñ•MÑÉ•…´ì(€€€ÑÉ…¹Í±…Ñ•‘Õ‘¥¼¹Á±…ä ¤¹…Ñ  ¡•ÉÉ½È¤€ôøì(€€€€€½¹Í½±”¹İ…É¸ ‰QÉ…¹Í±…Ñ•…Õ‘¥¼…ÕÑ½Á±…äİ…Ì‰±½­•ˆ°•ÉÉ½È¤ì(€€€€€Í•ÑMÑ…ÑÕÌ (€€€€€€€€‹BB×FB×BËBûBĞƒBÿBûBÓBëBïF;FFGBô°ƒB÷BøƒBÇFBÃFBßB×F ƒBßBÃBÇBïBûBëBãFBûBËBÃBìƒBÃBËFBûBóBÃFBãFB×FBëBûBÔƒBËBûFBÿFBûBãBßBËB×BÓB×B÷BãBÔƒBÃB÷BÏBïBãBçFBëBûBÏBøƒBßBËFBëBÀ¸ƒBƒBÃBßFB×F#BãFBÔ…ÕÑ½Á±…äƒBÓBïF<±½…±¡½ÍĞ¸ˆ°(€€€€€€€€‰•ÉÉ½Èˆ(€€€€€€¤ì(€€€ô¤ì(€ôì((€ÁŒ¹½¹½¹¹•Ñ¥½¹ÍÑ…Ñ•¡…¹”€ô€ ¤€ôøì(€€€¥˜€ …ÁŒ¤É•ÑÕÉ¸ì((€€€¥˜€¡ÁŒ¹½¹¹•Ñ¥½¹MÑ…Ñ”€ôôô€‰½¹¹•Ñ•ˆ¤ì(€€€€€Í•ÑMÑ…ÑÕÌ ‹BB×FB×BËBûBĞƒBãBÓFGFèƒFFFFBëBãBäƒŠHƒBÃB÷BÏBïBãBçFBëBãBäˆ°€‰±¥Ù”ˆ¤ì(€€€ô•±Í”¥˜€¡ÁŒ¹½¹¹•Ñ¥½¹MÑ…Ñ”€ôôô€‰½¹¹•Ñ¥¹œˆ¤ì(€€€€€Í•ÑMÑ…ÑÕÌ ‹BFFBÃB÷BÃBËBïBãBËBÃF8]•‰IQ·FBûB×BÓBãB÷B×B÷BãB×Š˜ˆ¤ì(€€€ô•±Í”¥˜€¡l‰™…¥±•ˆ°€‰‘¥Í½¹¹•Ñ•‰t¹¥¹±Õ‘•Ì¡ÁŒ¹½¹¹•Ñ¥½¹MÑ…Ñ”¤¤ì(€€€€€Í•ÑMÑ…ÑÕÌ ‹B‡BûB×BÓBãB÷B×B÷BãBÔƒFƒBÿB×FB×BËBûBÓFBãBëBûBğƒBÿBûFB×FF?B÷Bø¸ˆ°€‰•ÉÉ½Èˆ¤ì(€€€ô(€ôì((€ÁŒ¹½¹¥•½¹¹•Ñ¥½¹ÍÑ…Ñ•¡…¹”€ô€ ¤€ôøì(€€€¥˜€ …ÁŒ¤É•ÑÕÉ¸ì(€€€½¹Í½±”¹¥¹™¼ ‰%ÍÑ…Ñ”èˆ°ÁŒ¹¥•½¹¹•Ñ¥½¹MÑ…Ñ”¤ì(€ôì((€‘…Ñ…¡…¹¹•°€ôÁŒ¹É•…Ñ•…Ñ…¡…¹¹•° ‰½…¤µ•Ù•¹ÑÌˆ¤ì(€‘…Ñ…¡…¹¹•°¹½¹½Á•¸€ô€ ¤€ôø½¹Í½±”¹¥¹™¼ ‰I•…±Ñ¥µ”•Ù•¹Ğ¡…¹¹•°½Á•¹•ˆ¤ì(€‘…Ñ…¡…¹¹•°¹½¹•ÉÉ½È€ô€¡•Ù•¹Ğ¤€ôø½¹Í½±”¹•ÉÉ½È ‰I•…±Ñ¥µ”‘…Ñ„¡…¹¹•°•ÉÉ½Èˆ°•Ù•¹Ğ¤ì(€‘…Ñ…¡…¹¹•°¹½¹µ•ÍÍ…”€ô€¡ì‘…Ñ„ô¤€ôøì(€€€ÑÉäì(€€€€€½¹I•…±Ñ¥µ•Ù•¹Ğ¡)M=8¹Á…ÉÍ”¡‘…Ñ„¤¤ì(€€€ô…Ñ €¡•ÉÉ½È¤ì(€€€€€½¹Í½±”¹İ…É¸ ‰	…É•…±Ñ¥µ”•Ù•¹Ğˆ°•ÉÉ½È°‘…Ñ„¤ì(€€€ô(€ôì((€½¹ÍĞ½™™•È€ô…İ…¥ĞÁŒ¹É•…Ñ•=™™•È ¤ì(€…İ…¥ĞÁŒ¹Í•Ñ1½…±•ÍÉ¥ÁÑ¥½¸¡½™™•È¤ì((€Í•ÑMÑ…ÑÕÌ ‹BBûBÓBëBïF;FBÃF;FF0ƒBè=Á•¹$I•…±Ñ¥µ—Š˜ˆ¤ì((€½¹ÍĞÍ‘ÁI•ÍÁ½¹Í”€ô…İ…¥Ğ™•Ñ¡]¥Ñ¡Q¥µ•½ÕĞ (€€€€‰¡ÑÑÁÌè¼½…Á¤¹½Á•¹…¤¹½´½ØÄ½É•…±Ñ¥µ”½ÑÉ…¹Í±…Ñ¥½¹Ì½…±±Ìˆ°(€€€ì(€€€€€µ•Ñ¡½è€‰A=MPˆ°(€€€€€¡•…‘•ÉÌèì(€€€€€€€ÕÑ¡½É¥é…Ñ¥½¸è	•…É•È€‘í±¥•¹ÑM•É•Ñõ€°(€€€€€€€€‰½¹Ñ•¹ĞµQåÁ”ˆè€‰…ÁÁ±¥…Ñ¥½¸½Í‘Àˆ(€€€€€ô°(€€€€€‰½‘äè½™™•È¹Í‘À(€€€ô°(€€€€ÈÀÀÀÀ(€€¤ì((€¥˜€ …Í‘ÁI•ÍÁ½¹Í”¹½¬¤ì(€€€½¹ÍĞµ•ÍÍ…”€ô…İ…¥ĞÍ‘ÁI•ÍÁ½¹Í”¹Ñ•áĞ ¤ì(€€€Ñ¡É½Ü¹•ÜÉÉ½È ¡=Á•¹$]•‰IQè!QQ@€‘íÍ‘ÁI•ÍÁ½¹Í”¹ÍÑ…ÑÕÍô¸€‘íµ•ÍÍ…•ô¤¤ì(€ô((€½¹ÍĞ…¹Íİ•ÉM‘À€ô…İ…¥ĞÍ‘ÁI•ÍÁ½¹Í”¹Ñ•áĞ ¤ì(€…İ…¥ĞÁŒ¹Í•ÑI•µ½Ñ••ÍÉ¥ÁÑ¥½¸¡ìÑåÁ”è€‰…¹Íİ•Èˆ°Í‘Àè…¹Íİ•ÉM‘Àô¤ì)ô()…Íå¹Œ™Õ¹Ñ¥½¸ÍÑ…ÉÑQÉ…¹Í±…Ñ¥½¸ ¤ì(€¥˜€¡ÍÑ…ÉÑ¥¹œñğÁŒ¤É•ÑÕÉ¸ì((€ÍÑ…ÉÑ¥¹œ€ôÑÉÕ”ì(€ÍÑ…ÉÑ	Ñ¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€ÍÑ½Á	Ñ¸¹‘¥Í…‰±•€ô™…±Í”ì(€µ½‘•	ÕÑÑ½¹Ì¹™½É…  ¡‰ÕÑÑ½¸¤€ôø€¡‰ÕÑÑ½¸¹‘¥Í…‰±•€ôÑÉÕ”¤¤ì(€É•Í•ÑQÉ…¹ÍÉ¥ÁÑA±…•¡½±‘•ÉÌ ¤ì((€ÑÉäì(€€€…ÍÍ•ÉÑ	É½İÍ•É¹Ù¥É½¹µ•¹Ğ ¤ì((€€€€¼¼Í¬™½È½…ÁÑÕÉ”…Õ‘¥¼™¥ÉÍĞ°‘¥É•Ñ±ä™É½´Ñ¡”ÕÍ•ÈÌ‰ÕÑÑ½¸±¥¬¸(€€€½¹ÍĞÍÑÉ•…´€ô…İ…¥Ğ•ÑM½ÕÉ•Õ‘¥¼ ¤ì((€€€Í•ÑMÑ…ÑÕÌ ‹BFBûBËB×FF?F8ƒBïBûBëBÃBïF3B÷F/BäƒFB×FBËB×F ƒBàA$·BëBïF;FŠ˜ˆ¤ì(€€€…İ…¥Ğ¡•­M•ÉÙ•È ¤ì((€€€Í•ÑMÑ…ÑÕÌ ‹B‡BûBßBÓBÃF8ƒBßBÃF'BãF'FGB÷B÷FF8ƒFB×FFBãF8ƒBÿB×FB×BËBûBÓBÃŠ˜ˆ¤ì(€€€½¹ÍĞ±¥•¹ÑM•É•Ğ€ô…İ…¥ĞÉ•…Ñ•±¥•¹ÑM•É•Ğ ¤ì((€€€…İ…¥Ğ½¹¹•ÑI•…±Ñ¥µ”¡ÍÑÉ•…´°±¥•¹ÑM•É•Ğ¤ì(€ô…Ñ €¡•ÉÉ½È¤ì(€€€½¹Í½±”¹•ÉÉ½È ‰QÉ…¹Í±…Ñ¥½¸ÍÑ…ÉÑÕÀ™…¥±•ˆ°•ÉÉ½È¤ì(€€€…İ…¥ĞÍÑ½ÁQÉ…¹Í±…Ñ¥½¸¡ì­••ÁMÑ…ÑÕÌèÑÉÕ”ô¤ì(€€€Í•ÑMÑ…ÑÕÌ¡™É¥•¹‘±åÉÉ½È¡•ÉÉ½È¤°€‰•ÉÉ½Èˆ¤ì(€ô™¥¹…±±äì(€€€ÍÑ…ÉÑ¥¹œ€ô™…±Í”ì(€€€¥˜€ …ÁŒ¤ì(€€€€€ÍÑ…ÉÑ	Ñ¸¹‘¥Í…‰±•€ô™…±Í”ì(€€€€€ÍÑ½Á	Ñ¸¹‘¥Í…‰±•€ôÑÉÕ”ì(€€€€€µ½‘•	ÕÑÑ½¹Ì¹™½É…  ¡‰ÕÑÑ½¸¤€ôø€¡‰ÕÑÑ½¸¹‘¥Í…‰±•€ô™…±Í”¤¤ì(€€€ô(€ô)ô( if (!pc) {
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      modeButtons.forEach((button) => (button.disabled = false));
     }
-
-    await pc.setRemoteDescription({
-      type: "answer",
-      sdp: await sdpResponse.text()
-    });
-
-    stopBtn.disabled = false;
-  } catch (error) {
-    console.error(error);
-    await stopTranslation({ keepStatus: true });
-    setStatus(error.message || "ĞĞµ ÑƒĞ´Ğ°Ğ»Ğ¾ÑÑŒ Ğ·Ğ°Ğ¿ÑƒÑÑ‚Ğ¸Ñ‚ÑŒ Ğ¿ĞµÑ€ĞµĞ²Ğ¾Ğ´", "error");
   }
 }
 
 async function stopTranslation({ keepStatus = false } = {}) {
+  if (dataChannel?.readyState === "open") {
+    try {
+      dataChannel.send(JSON.stringify({ type: "session.close" }));
+    } catch {
+      // Peer may already be closing.
+    }
+  }
+
   dataChannel?.close();
   dataChannel = null;
 
@@ -224,6 +306,7 @@ async function stopTranslation({ keepStatus = false } = {}) {
   displayStream?.getTracks().forEach((track) => track.stop());
   displayStream = null;
 
+  translatedAudio.pause();
   translatedAudio.srcObject = null;
 
   fileCaptureStream?.getTracks().forEach((track) => track.stop());
@@ -234,13 +317,24 @@ async function stopTranslation({ keepStatus = false } = {}) {
   startBtn.disabled = false;
   stopBtn.disabled = true;
   modeButtons.forEach((button) => (button.disabled = false));
-  if (!keepStatus) setStatus("ĞŸĞµÑ€ĞµĞ²Ğ¾Ğ´ Ğ¾ÑÑ‚Ğ°Ğ½Ğ¾Ğ²Ğ»ĞµĞ½");
+
+  if (!keepStatus) setStatus("ĞŸĞµÑ€ĞµĞ²Ğ¾Ğ´ Ğ¾ÑÑ‚Ğ°Ğ½Ğ¾Ğ²Ğ»ĞµĞ½.");
 }
 
 startBtn.addEventListener("click", startTranslation);
 stopBtn.addEventListener("click", () => stopTranslation());
+
 window.addEventListener("beforeunload", () => {
+  dataChannel?.close();
   pc?.close();
   sourceStream?.getTracks().forEach((track) => track.stop());
   displayStream?.getTracks().forEach((track) => track.stop());
 });
+
+if (location.protocol === "file:") {
+  setStatus("Ğ—Ğ°Ğ¿ÑƒÑÑ‚Ğ¸Ñ‚Ğµ Ğ¿Ñ€Ğ¸Ğ»Ğ¾Ğ¶ĞµĞ½Ğ¸Ğµ Ñ‡ĞµÑ€ĞµĞ· `npm run dev`, Ğ° Ğ½Ğµ Ğ¾Ñ‚ĞºÑ€Ñ‹Ğ²Ğ°Ğ¹Ñ‚Ğµ index.html Ğ½Ğ°Ğ¿Ñ€ÑĞ¼ÑƒÑ.", "error");
+} else if (!window.isSecureContext || !navigator.mediaDevices) {
+  setStatus("ĞœĞ¸ĞºÑ€Ğ¾Ñ„Ğ¾Ğ½ Ğ½ĞµĞ´Ğ¾ÑÑ‚ÑƒĞ¿ĞµĞ½ Ğ² Ñ‚ĞµĞºÑƒÑ‰ĞµĞ¼ ĞºĞ¾Ğ½Ñ‚ĞµĞºÑÑ‚Ğµ. Ğ˜ÑĞ¿Ğ¾Ğ»ÑŒĞ·ÑƒĞ¹Ñ‚Ğµ http://localhost:3000 Ğ¸Ğ»Ğ¸ HTTPS.", "error");
+} else {
+  setStatus("Ğ˜Ğ½Ñ‚ĞµÑ€Ñ„ĞµĞ¹Ñ Ğ·Ğ°Ğ³Ñ€ÑƒĞ¶ĞµĞ½. Ğ’Ñ‹Ğ±ĞµÑ€Ğ¸Ñ‚Ğµ Ğ¸ÑÑ‚Ğ¾Ñ‡Ğ½Ğ¸Ğº Ğ¸ Ğ½Ğ°Ğ¶Ğ¼Ğ¸Ñ‚Ğµ Â«ĞĞ°Ñ‡Ğ°Ñ‚ÑŒ Ğ¿ĞµÑ€ĞµĞ²Ğ¾Ğ´Â».");
+}

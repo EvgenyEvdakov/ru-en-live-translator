@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>RU → EN Live Translator</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <main class="shell">
@@ -41,9 +41,9 @@
         <button id="stopBtn" class="secondary" type="button" disabled>Остановить</button>
       </div>
 
-      <div class="status-row">
+      <div class="status-row" role="status" aria-live="polite">
         <span id="statusDot" class="dot"></span>
-        <span id="status">Готово к запуску</span>
+        <span id="status">Загрузка интерфейса…</span>
       </div>
     </section>
 
@@ -65,12 +65,13 @@
     </section>
 
     <section class="notes">
-      <p><strong>Совет:</strong> для перевода YouTube/стрима откройте его в отдельной вкладке, выберите «Видео / вкладка», затем при демонстрации экрана включите передачу звука вкладки.</p>
+      <p><strong>Запуск:</strong> не открывайте <code>index.html</code> двойным кликом. Выполните <code>npm install</code>, затем <code>npm run dev</code> и откройте <code>http://localhost:3000</code>.</p>
+      <p><strong>Видео / вкладка:</strong> при выборе вкладки обязательно включите «Поделиться аудио» / «Share tab audio».</p>
       <p>API-ключ хранится только на сервере и не отправляется в браузер.</p>
     </section>
   </main>
 
   <audio id="translatedAudio" autoplay></audio>
-  <script type="module" src="/app.js"></script>
+  <script defer src="./app.js"></script>
 </body>
 </html>
