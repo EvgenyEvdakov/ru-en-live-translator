@@ -7,6 +7,7 @@ import os
 import struct
 import tempfile
 import threading
+import time
 import wave
 from collections import deque
 from pathlib import Path
@@ -21,6 +22,20 @@ os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "120")
 os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "30")
+
+def normalize_proxy_environment() -> None:
+    """httpx/huggingface_hub support SOCKS5, but reject socks4:// URLs."""
+    for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        value = os.environ.get(key)
+        if not value:
+            continue
+        lowered = value.lower()
+        if lowered.startswith("socks4://") or lowered.startswith("socks4a://"):
+            normalized = "socks5://" + value.split("://", 1)[1]
+            os.environ[key] = normalized
+            print(f"[proxy] {key}: normalized SOCKS4 -> SOCKS5 ({normalized})")
+
+normalize_proxy_environment()
 
 import numpy as np
 import torch
@@ -258,8 +273,13 @@ class TranslationSession:
     def __init__(self, websocket: WebSocket) -> None:
         self.ws = websocket
         self.segmenter = SpeechSegmenter()
-        self.queue: asyncio.Queue[bytes | None] = asyncio.Queue()
+        self.queue: asyncio.Queue[tuple[bytes, float] | None] = asyncio.Queue()
         self.worker: asyncio.Task | None = None
+        self.mode = "mic"
+        self.source_duration: float | None = None
+        self.received_samples = 0
+        self.processed_source_seconds = 0.0
+        self.last_progress_samples = 0
         self.reference_parts: list[np.ndarray] = []
         self.reference_samples = 0
         self.reference_target = int(VOICE_REFERENCE_SECONDS * SAMPLE_RATE)
@@ -272,7 +292,21 @@ class TranslationSession:
     async def send_json(self, payload: dict) -> None:
         await self.ws.send_text(json.dumps(payload, ensure_ascii=False))
 
+    async def send_progress(self, stage: str = "Ожидание аудио") -> None:
+        received = self.received_samples / SAMPLE_RATE
+        processed = self.processed_source_seconds
+        await self.send_json({
+            "type": "progress",
+            "mode": self.mode,
+            "stage": stage,
+            "received_seconds": round(received, 3),
+            "processed_seconds": round(processed, 3),
+            "queue_seconds": round(max(0.0, received - processed), 3),
+            "total_seconds": self.source_duration,
+        })
+
     async def load_models(self) -> None:
+        await self.send_progress("Загрузка моделей")
         await self.send_json({"type": "status", "message": f"Загружаю распознавание речи ({WHISPER_MODEL})…"})
         await asyncio.to_thread(MODELS.load_asr)
         await self.send_json({"type": "status", "message": "Загружаю локальный перевод RU → EN…"})
@@ -285,9 +319,20 @@ class TranslationSession:
             "device": MODELS.tts_device,
         })
 
-    async def start(self) -> None:
+    async def start(self, payload: dict | None = None) -> None:
         if self.running:
             return
+        payload = payload or {}
+        self.mode = str(payload.get("mode") or "mic")
+        duration = payload.get("duration")
+        try:
+            duration = float(duration) if duration is not None else None
+        except (TypeError, ValueError):
+            duration = None
+        self.source_duration = duration if duration and duration > 0 else None
+        self.received_samples = 0
+        self.processed_source_seconds = 0.0
+        self.last_progress_samples = 0
         self.running = True
         try:
             await self.load_models()
@@ -299,15 +344,20 @@ class TranslationSession:
     async def add_audio(self, data: bytes) -> None:
         if not self.running:
             return
+        self.received_samples += len(data) // 2
+        received_seconds = self.received_samples / SAMPLE_RATE
         for segment in self.segmenter.push(data):
-            await self.queue.put(segment)
+            await self.queue.put((segment, received_seconds))
+        if self.received_samples - self.last_progress_samples >= SAMPLE_RATE // 2:
+            self.last_progress_samples = self.received_samples
+            await self.send_progress("Получение аудио")
 
     async def stop(self) -> None:
         if not self.running:
             return
         final_segment = self.segmenter.flush()
         if final_segment:
-            await self.queue.put(final_segment)
+            await self.queue.put((final_segment, self.received_samples / SAMPLE_RATE))
         await self.queue.put(None)
         if self.worker:
             await self.worker
@@ -349,11 +399,13 @@ class TranslationSession:
             return
         audio = pcm.astype(np.float32) / 32768.0
 
+        await self.send_progress("Распознавание речи")
         source_text = await asyncio.to_thread(MODELS.transcribe_ru, audio)
         if not source_text:
             return
         await self.send_json({"type": "source", "text": source_text})
 
+        await self.send_progress("Перевод RU → EN")
         english = await asyncio.to_thread(MODELS.translate_ru_en, source_text)
         if not english:
             return
@@ -367,6 +419,7 @@ class TranslationSession:
             to_speak = self.pending_speech + [english]
             self.pending_speech.clear()
             for phrase in to_speak:
+                await self.send_progress("Озвучка клонированным голосом")
                 await self.send_json({"type": "status", "message": "Озвучиваю перевод тем же голосом…"})
                 await self._send_speech(phrase)
             await self.send_json({"type": "status", "message": "Слушаю следующую фразу…"})
@@ -381,12 +434,18 @@ class TranslationSession:
     async def _worker(self) -> None:
         try:
             while True:
-                segment = await self.queue.get()
-                if segment is None:
+                item = await self.queue.get()
+                if item is None:
                     self.queue.task_done()
                     break
+                segment, source_end_seconds = item
                 try:
                     await self._process_segment(segment)
+                    self.processed_source_seconds = max(
+                        self.processed_source_seconds,
+                        source_end_seconds,
+                    )
+                    await self.send_progress("Фраза обработана")
                 except Exception as exc:
                     await self.send_json({"type": "error", "message": str(exc)})
                 finally:
@@ -429,13 +488,19 @@ async def translate_socket(websocket: WebSocket) -> None:
                 payload = json.loads(text_message)
                 if payload.get("type") == "start":
                     try:
-                        await session.start()
+                        await session.start(payload)
                     except Exception as exc:
                         message = str(exc)
-                        if "xethub" in message.lower() or "cas client" in message.lower() or "reconstruction" in message.lower():
+                        if (
+                            "xethub" in message.lower()
+                            or "cas client" in message.lower()
+                            or "reconstruction" in message.lower()
+                            or "unknown scheme for proxy" in message.lower()
+                        ):
                             message = (
-                                "Ошибка загрузки Hugging Face Xet/CAS. Xet теперь отключён автоматически. "
-                                "Перезапустите сервер и нажмите «Начать перевод» ещё раз — загрузка продолжится через HTTP."
+                                "Ошибка сетевого доступа к Hugging Face. Приложение автоматически отключает Xet/CAS "
+                                "и преобразует socks4:// proxy в socks5://. Обновите зависимости, перезапустите сервер "
+                                "и нажмите «Начать перевод» ещё раз."
                             )
                         await session.send_json({"type": "error", "message": message})
                 elif payload.get("type") == "stop":
