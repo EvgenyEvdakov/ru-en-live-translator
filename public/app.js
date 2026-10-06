@@ -9,6 +9,9 @@ const translatedTranscript = $("#translatedTranscript");
 const fileBox = $("#fileBox");
 const videoFile = $("#videoFile");
 const videoPreview = $("#videoPreview");
+const resultBox = $("#resultBox");
+const resultVideo = $("#resultVideo");
+const downloadResult = $("#downloadResult");
 const modeButtons = [...document.querySelectorAll(".mode")];
 
 let mode = "mic";
@@ -25,6 +28,8 @@ let startedCapture = false;
 let stopping = false;
 let sourceLines = [];
 let translatedLines = [];
+let activeVideoJobId = null;
+let videoPollTimer = null;
 
 function setStatus(message, kind = "idle") {
   status.textContent = message;
@@ -56,7 +61,7 @@ function appendText(target, lines, text, placeholder) {
 
 modeButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    if (socket) return;
+    if (socket || activeVideoJobId) return;
     mode = button.dataset.mode;
     modeButtons.forEach((item) => item.classList.toggle("active", item === button));
     fileBox.classList.toggle("hidden", mode !== "file");
@@ -77,6 +82,8 @@ videoFile.addEventListener("change", () => {
   videoPreview.src = objectUrl;
   videoPreview.load();
   videoPreview.classList.add("has-file");
+  resultBox?.classList.add("hidden");
+  if (resultVideo) resultVideo.removeAttribute("src");
   setStatus(`Файл выбран: ${file.name}`);
 });
 
@@ -247,8 +254,94 @@ function handleServerMessage(event) {
   }
 }
 
+async function pollVideoJob(jobId) {
+  const response = await fetch(`/api/video/jobs/${jobId}`, { cache: "no-store" });
+  if (!response.ok) throw new Error("Не удалось получить состояние обработки видео.");
+  const job = await response.json();
+
+  window.dispatchEvent(new CustomEvent("translator-progress", {
+    detail: {
+      mode: "file",
+      stage: job.stage,
+      processed_seconds: job.processed_seconds || 0,
+      total_seconds: job.total_seconds,
+      overall_percent: job.progress || 0,
+      elapsed_seconds: job.elapsed_seconds || 0,
+      queue_seconds: 0,
+      received_seconds: job.total_seconds || 0,
+    },
+  }));
+
+  if (job.source_text) sourceTranscript.textContent = job.source_text;
+  if (job.translation_text) translatedTranscript.textContent = job.translation_text;
+
+  if (job.state === "done") {
+    if (videoPollTimer) clearInterval(videoPollTimer);
+    videoPollTimer = null;
+    activeVideoJobId = null;
+    const url = `${job.download_url}?t=${Date.now()}`;
+    resultVideo.src = url;
+    downloadResult.href = job.download_url;
+    resultBox.classList.remove("hidden");
+    setStatus("Готово: новый MP4 с английской голосовой дорожкой создан.", "live");
+    setControls(false);
+    return;
+  }
+
+  if (job.state === "error") {
+    if (videoPollTimer) clearInterval(videoPollTimer);
+    videoPollTimer = null;
+    activeVideoJobId = null;
+    setControls(false);
+    throw new Error(job.error || "Ошибка обработки видео.");
+  }
+
+  if (job.state === "cancelled") {
+    if (videoPollTimer) clearInterval(videoPollTimer);
+    videoPollTimer = null;
+    activeVideoJobId = null;
+    setControls(false);
+    setStatus("Обработка видео отменена.");
+    return;
+  }
+
+  setStatus(`${job.stage} · ${Math.round(job.progress || 0)}%`, "live");
+}
+
+async function startVideoFileTranslation() {
+  const file = videoFile.files?.[0];
+  if (!file) throw new Error("Сначала выберите видеофайл.");
+
+  resetText();
+  resultBox.classList.add("hidden");
+  resultVideo.removeAttribute("src");
+  setControls(true);
+  stopping = false;
+  setStatus("Загружаю видео в локальный обработчик…", "live");
+
+  const form = new FormData();
+  form.append("file", file, file.name);
+  const response = await fetch("/api/video/jobs", { method: "POST", body: form });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.detail || "Не удалось запустить обработку видео.");
+
+  activeVideoJobId = payload.id;
+  await pollVideoJob(activeVideoJobId);
+  videoPollTimer = setInterval(() => {
+    if (!activeVideoJobId) return;
+    pollVideoJob(activeVideoJobId).catch((error) => {
+      console.error(error);
+      setStatus(error.message || String(error), "error");
+      if (videoPollTimer) clearInterval(videoPollTimer);
+      videoPollTimer = null;
+      activeVideoJobId = null;
+      setControls(false);
+    });
+  }, 1000);
+}
+
 async function startTranslation() {
-  if (socket) return;
+  if (socket || activeVideoJobId) return;
   if (location.protocol === "file:") {
     setStatus("Нельзя открывать index.html двойным кликом. Запустите python local_server.py и откройте http://localhost:8000.", "error");
     return;
@@ -260,6 +353,11 @@ async function startTranslation() {
   nextPlayTime = 0;
 
   try {
+    if (mode === "file") {
+      await startVideoFileTranslation();
+      return;
+    }
+
     setStatus("Запрашиваю доступ к источнику звука…");
     mediaStream = await getInput();
     setStatus("Подключаюсь к локальным моделям…");
@@ -319,7 +417,18 @@ function fail(error) {
   finishStop();
 }
 
-function stopTranslation() {
+async function stopTranslation() {
+  if (activeVideoJobId) {
+    stopping = true;
+    setStatus("Останавливаю обработку после текущей фразы…");
+    try {
+      await fetch(`/api/video/jobs/${activeVideoJobId}/cancel`, { method: "POST" });
+    } catch (error) {
+      console.error(error);
+    }
+    return;
+  }
+
   if (!socket) {
     finishStop();
     return;
@@ -340,5 +449,6 @@ stopBtn.addEventListener("click", stopTranslation);
 window.addEventListener("beforeunload", () => {
   stopCapture();
   try { socket?.close(); } catch {}
+  if (videoPollTimer) clearInterval(videoPollTimer);
   if (objectUrl) URL.revokeObjectURL(objectUrl);
 });
