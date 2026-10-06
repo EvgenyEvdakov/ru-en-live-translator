@@ -4,3 +4,4 @@ python-dotenv>=1.0,<2
 faster-whisper>=1.1,<2
 chatterbox-tts>=0.1.7
 sentencepiece>=0.2
+setuptools<81
