@@ -3,35 +3,41 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>RU → EN Live Translator</title>
+  <title>Local RU → EN Voice Translator</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
   <main class="shell">
     <section class="hero">
-      <p class="eyebrow">REALTIME TRANSLATION</p>
+      <p class="eyebrow">LOCAL · FREE · NO API KEY</p>
       <h1>Русский <span>→</span> English</h1>
-      <p class="lead">Переводите речь с микрофона, звук вкладки/видео или локальный видеофайл в английскую речь и субтитры почти в реальном времени.</p>
+      <p class="lead">Локальный перевод речи с клонированием тембра говорящего. После первых секунд речи приложение запоминает голос и озвучивает английский перевод похожим голосом.</p>
     </section>
 
     <section class="panel">
+      <div class="badge-row">
+        <span class="badge">Без OpenAI API</span>
+        <span class="badge">Работает локально</span>
+        <span class="badge">Voice cloning</span>
+      </div>
+
       <div class="mode-grid" role="radiogroup" aria-label="Источник аудио">
         <button class="mode active" data-mode="mic" type="button">
           <strong>Микрофон</strong>
-          <small>Живая речь</small>
+          <small>Живая русская речь</small>
         </button>
         <button class="mode" data-mode="screen" type="button">
           <strong>Видео / вкладка</strong>
-          <small>Звук экрана или браузера</small>
+          <small>YouTube, стрим, звонок</small>
         </button>
         <button class="mode" data-mode="file" type="button">
           <strong>Видео файл</strong>
-          <small>MP4, WebM и другое</small>
+          <small>Локальный MP4 / WebM</small>
         </button>
       </div>
 
       <div id="fileBox" class="file-box hidden">
-        <label for="videoFile">Выберите видео</label>
+        <label for="videoFile">Выберите видеофайл</label>
         <input id="videoFile" type="file" accept="video/*" />
         <video id="videoPreview" controls playsinline></video>
       </div>
@@ -41,37 +47,30 @@
         <button id="stopBtn" class="secondary" type="button" disabled>Остановить</button>
       </div>
 
-      <div class="status-row" role="status" aria-live="polite">
+      <div class="status-row">
         <span id="statusDot" class="dot"></span>
-        <span id="status">Загрузка интерфейса…</span>
+        <span id="status">Готово. Первый запуск скачает локальные модели.</span>
       </div>
     </section>
 
     <section class="transcripts">
       <article>
-        <header>
-          <span>RU</span>
-          <h2>Исходная речь</h2>
-        </header>
+        <header><span>RU</span><h2>Распознано</h2></header>
         <div id="sourceTranscript" class="transcript muted">Русская речь появится здесь…</div>
       </article>
       <article class="translated-card">
-        <header>
-          <span>EN</span>
-          <h2>English translation</h2>
-        </header>
-        <div id="translatedTranscript" class="transcript">English subtitles will appear here…</div>
+        <header><span>EN</span><h2>Перевод</h2></header>
+        <div id="translatedTranscript" class="transcript">English translation will appear here…</div>
       </article>
     </section>
 
     <section class="notes">
-      <p><strong>Запуск:</strong> не открывайте <code>index.html</code> двойным кликом. Выполните <code>npm install</code>, затем <code>npm run dev</code> и откройте <code>http://localhost:3000</code>.</p>
-      <p><strong>Видео / вкладка:</strong> при выборе вкладки обязательно включите «Поделиться аудио» / «Share tab audio».</p>
-      <p>API-ключ хранится только на сервере и не отправляется в браузер.</p>
+      <p><strong>Важно:</strong> «идентичный» голос технически не гарантируется. Модель клонирует тембр и часть манеры речи; качество выше на чистом голосе без музыки и посторонних людей.</p>
+      <p><strong>Задержка:</strong> перевод идёт по коротким фразам. На NVIDIA GPU это близко к реальному времени; на CPU клонирование голоса может заметно отставать.</p>
+      <p>Для вкладки браузера включите <strong>«Поделиться аудио вкладки»</strong>. Для микрофона лучше использовать наушники, чтобы перевод не попадал обратно в микрофон.</p>
     </section>
   </main>
 
-  <audio id="translatedAudio" autoplay></audio>
-  <script defer src="./app.js"></script>
+  <script src="./app.js" defer></script>
 </body>
 </html>
