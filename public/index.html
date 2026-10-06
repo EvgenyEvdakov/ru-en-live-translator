@@ -51,6 +51,20 @@
         <span id="statusDot" class="dot"></span>
         <span id="status">Готово. Первый запуск скачает локальные модели.</span>
       </div>
+
+      <div id="processingProgress" class="processing-progress">
+        <div class="processing-progress-head">
+          <strong>Время обработки</strong>
+          <span id="processingProgressValue">00:00</span>
+        </div>
+        <div class="processing-progress-track">
+          <div id="processingProgressBar" class="processing-progress-bar"></div>
+        </div>
+        <div class="processing-progress-info">
+          <span id="processingProgressText">Ожидание запуска</span>
+          <span id="processingProgressPercent">0%</span>
+        </div>
+      </div>
     </section>
 
     <section class="transcripts">
@@ -72,5 +86,6 @@
   </main>
 
   <script src="./app.js" defer></script>
+  <script src="./progress.js" defer></script>
 </body>
 </html>

@@ -11,15 +11,23 @@ import wave
 from collections import deque
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load .env before importing Hugging Face libraries. On some Windows systems
+# hf-xet/CAS fails while reconstructing large model files. Hugging Face
+# officially supports HF_HUB_DISABLE_XET=1 to force the regular HTTP path.
+load_dotenv()
+os.environ.setdefault("HF_HUB_DISABLE_XET", "1")
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "120")
+os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "30")
+
 import numpy as np
 import torch
-from dotenv import load_dotenv
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
 from faster_whisper import WhisperModel
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-
-load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
 PUBLIC_DIR = BASE_DIR / "public"
@@ -281,7 +289,11 @@ class TranslationSession:
         if self.running:
             return
         self.running = True
-        await self.load_models()
+        try:
+            await self.load_models()
+        except Exception:
+            self.running = False
+            raise
         self.worker = asyncio.create_task(self._worker())
 
     async def add_audio(self, data: bytes) -> None:
@@ -416,7 +428,16 @@ async def translate_socket(websocket: WebSocket) -> None:
             if text_message is not None:
                 payload = json.loads(text_message)
                 if payload.get("type") == "start":
-                    await session.start()
+                    try:
+                        await session.start()
+                    except Exception as exc:
+                        message = str(exc)
+                        if "xethub" in message.lower() or "cas client" in message.lower() or "reconstruction" in message.lower():
+                            message = (
+                                "Ошибка загрузки Hugging Face Xet/CAS. Xet теперь отключён автоматически. "
+                                "Перезапустите сервер и нажмите «Начать перевод» ещё раз — загрузка продолжится через HTTP."
+                            )
+                        await session.send_json({"type": "error", "message": message})
                 elif payload.get("type") == "stop":
                     await session.stop()
                 continue

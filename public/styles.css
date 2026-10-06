@@ -69,3 +69,16 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .mode-grid, .transcripts { grid-template-columns: 1fr; }
   .transcript { font-size: 19px; }
 }
+
+.processing-progress { margin-top: 18px; padding: 15px; border: 1px solid #252f42; border-radius: 15px; background: rgba(10, 15, 25, .72); }
+.processing-progress-head, .processing-progress-info { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+.processing-progress-head { font-size: 14px; }
+.processing-progress-head span, .processing-progress-info span:last-child { font-variant-numeric: tabular-nums; color: #c7d2fe; font-weight: 800; }
+.processing-progress-track { position: relative; height: 10px; margin-top: 11px; overflow: hidden; border-radius: 999px; background: #1c2534; }
+.processing-progress-bar { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #6366f1, #22c55e); transition: width .2s ease; }
+.processing-progress-bar.live { width: 35%; animation: live-progress 1.3s ease-in-out infinite alternate; }
+.processing-progress-info { margin-top: 10px; color: #8f9db3; font-size: 12px; line-height: 1.45; }
+@keyframes live-progress { from { transform: translateX(-25%); } to { transform: translateX(185%); } }
+@media (max-width: 760px) {
+  .processing-progress-info { align-items: flex-start; flex-direction: column; gap: 4px; }
+}
